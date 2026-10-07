@@ -16,6 +16,7 @@ from pathlib import Path
 from . import config as config_module
 from .config import Config
 from .vision.locate import LocateResult, locate_exp_field
+from .vision.reader import StatusReader
 from .vision.templates import TemplateSet
 from .win32.capture import CaptureError, WindowCapturer
 
@@ -66,23 +67,34 @@ def auto_configure(
 ) -> AutoSetup:
     """必要時自動設定 ROI 與二值化參數。
 
-    ``force=False`` 時，已經有 ROI 就直接沿用（使用者校準過的優先）。
+    ``force=False`` 時，已經有 ROI 就先**試讀一次**，讀得到才沿用。以前是看到有
+    ROI 就直接用，結果換個解析度就壞：狀態列並不是嚴格錨定在底部正中央，1920x1080
+    存下來的 ROI 到 1366x768 會偏個幾像素，第一個數字被切掉一半，從此每格都
+    「1 個字元無法辨識」。現在讀不到就重新定位、蓋掉舊的；重新定位也失敗
+    （多半是還沒進遊戲、狀態列根本不在畫面上）就還是沿用舊的，讓浮窗照常開著等。
     """
+    stale_reason = None
     if cfg.reader.exp_roi.is_set() and not force:
-        return AutoSetup(
-            located=None,
-            template_source=template_source,
-            roi_source="既有設定",
-            message="沿用已儲存的 ROI",
-        )
+        stale_reason = _verify_roi(cfg, capturer, templates)
+        if stale_reason is None:
+            return AutoSetup(
+                located=None,
+                template_source=template_source,
+                roi_source="既有設定",
+                message="沿用已儲存的 ROI（讀取正常）",
+            )
 
     try:
         frame = capturer.capture_client()
     except CaptureError as exc:
+        if stale_reason is not None:
+            return _keep_stale(template_source, stale_reason, f"擷取畫面失敗：{exc}")
         return AutoSetup(None, template_source, "失敗", f"擷取畫面失敗：{exc}")
 
     found = locate_exp_field(frame.pixels, templates)
     if found is None:
+        if stale_reason is not None:
+            return _keep_stale(template_source, stale_reason, "畫面上也找不到經驗值欄位")
         return AutoSetup(
             None,
             template_source,
@@ -97,6 +109,29 @@ def auto_configure(
     cfg.reader.ink_color = None
 
     detail = f"自動找到經驗值欄位 {found.text!r} @ {found.rect}"
+    if stale_reason is not None:
+        detail = f"已儲存的 ROI 讀不到（{stale_reason}），重新定位：" + detail
     if not found.confident:
         detail += "（讀不到百分比，升級接續會不準，建議手動校準 ROI）"
     return AutoSetup(found, template_source, "自動偵測", detail)
+
+
+def _verify_roi(cfg: Config, capturer: WindowCapturer, templates: TemplateSet) -> str | None:
+    """用已存的 ROI 讀一次。讀得到回傳 None，否則回傳失敗原因。"""
+    try:
+        reading = StatusReader(capturer, cfg.reader, templates).read()
+    except CaptureError as exc:
+        return str(exc)
+    return None if reading.ok else (reading.reason or "辨識失敗")
+
+
+def _keep_stale(template_source: str, stale_reason: str, why_not_relocated: str) -> AutoSetup:
+    return AutoSetup(
+        located=None,
+        template_source=template_source,
+        roi_source="既有設定",
+        message=(
+            f"沿用已儲存的 ROI，但目前讀不到（{stale_reason}；{why_not_relocated}）。"
+            "可能還沒進入遊戲或狀態列被遮住，進去之後會自動恢復。"
+        ),
+    )

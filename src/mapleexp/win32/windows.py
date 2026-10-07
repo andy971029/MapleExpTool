@@ -142,22 +142,25 @@ def list_windows(min_size: int = 200) -> list[WindowInfo]:
 
 
 def find_window(title_contains: str = "", process_name: str = "") -> WindowInfo | None:
-    """依標題子字串或行程名稱找視窗。
+    """依行程名稱或標題子字串找視窗。
 
-    標題優先；標題找不到時才用行程名稱（遊戲改版可能改標題，但 exe 名稱較穩定）。
+    **行程名稱優先**，標題只是備案。標題比對曾經排在前面，結果被瀏覽器分頁
+    撞到：GitHub 上這個專案的說明寫著「新楓之谷：經典版」，開著那一頁的 Chrome
+    視窗就排在遊戲前面被選走，之後整個讀不到。exe 名稱別的程式不會撞，所以
+    有它就先用它；真的找不到（遊戲改版換了 exe 名）才退回標題。
     """
     candidates = list_windows()
-
-    needle = (title_contains or "").strip().casefold()
-    if needle:
-        for info in candidates:
-            if needle in info.title.casefold():
-                return info
 
     proc = (process_name or "").strip().casefold()
     if proc:
         for info in candidates:
             if info.process.casefold() == proc:
+                return info
+
+    needle = (title_contains or "").strip().casefold()
+    if needle:
+        for info in candidates:
+            if needle in info.title.casefold():
                 return info
 
     return None
