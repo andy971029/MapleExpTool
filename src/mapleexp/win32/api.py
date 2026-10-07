@@ -23,9 +23,6 @@ CAPTUREBLT = 0x40000000
 BI_RGB = 0
 DIB_RGB_COLORS = 0
 
-PW_CLIENTONLY = 0x00000001
-PW_RENDERFULLCONTENT = 0x00000002
-
 GA_ROOT = 2
 
 SW_SHOWMINIMIZED = 2
@@ -130,9 +127,6 @@ user32.GetDC.restype = wintypes.HDC
 
 user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
 user32.ReleaseDC.restype = ctypes.c_int
-
-user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
-user32.PrintWindow.restype = wintypes.BOOL
 
 user32.WindowFromPoint.argtypes = [POINT]
 user32.WindowFromPoint.restype = wintypes.HWND

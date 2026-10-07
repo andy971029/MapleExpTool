@@ -333,6 +333,30 @@ class TestCharacterAndJob(SessionTestCase):
         self.assertEqual(self.session.job, "槍騎兵")
         self.assertEqual(self.session.character, "尼可拉絲麻吉")
 
+    def test_unmatched_job_does_not_overwrite_a_matched_one(self):
+        """職業那行偶爾讀壞（只剩 ``手``，打手／槍手同分）時，保留上次讀對的 ``槍手``。"""
+        image = blank_frame(24, 60)
+        image[3:9, 5:40, :3] = 255
+        image[14:20, 5:50, :3] = 255
+        self.session.job, self.session.character = "槍手", "某人"
+        answers = iter(["手", "某人"])
+        with mock.patch.object(
+            session_module.ocr, "recognize_best", lambda img, **k: next(answers)
+        ):
+            self.session._read_character(image)
+        self.assertEqual(self.session.job, "槍手")
+
+    def test_unmatched_job_is_kept_verbatim_when_nothing_known_yet(self):
+        image = blank_frame(24, 60)
+        image[3:9, 5:40, :3] = 255
+        image[14:20, 5:50, :3] = 255
+        answers = iter(["手", "某人"])
+        with mock.patch.object(
+            session_module.ocr, "recognize_best", lambda img, **k: next(answers)
+        ):
+            self.session._read_character(image)
+        self.assertEqual(self.session.job, "手")
+
     def test_unreadable_image_keeps_previous_names(self):
         self.session.job, self.session.character = "獵人", "某人"
         with mock.patch.object(session_module.ocr, "recognize_best", lambda img, **k: ""):

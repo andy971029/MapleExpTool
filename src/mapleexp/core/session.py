@@ -512,7 +512,12 @@ class TrackingSession:
         if not texts:
             return      # 讀不到就保留上一次的結果，不要把已知的名字洗掉
         if len(texts) >= 2:
-            job, character = jobvocab.identify(texts[0]).name, texts[1]
+            guess = jobvocab.identify(texts[0])
+            # 配不上清單（讀到的字不像任何職業、或兩個職業同分分不出來）時，
+            # 不要拿它蓋掉已經讀對的職業 —— 每 5 秒重讀一次，偶爾一格讀壞很正常。
+            # 還沒有職業時才照原文存，至少讓人看得到 OCR 讀到了什麼。
+            job = guess.name if guess.matched or not self.job else self.job
+            character = texts[1]
         else:
             job, character = self.job, texts[0]
         if self.character and character != self.character:

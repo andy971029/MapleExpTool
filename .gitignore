@@ -8,3 +8,8 @@ dist/
 # 打包產物
 *.spec.bak
 assets/icon-*.png
+
+# Claude Code
+CLAUDE.md
+CLAUDE.local.md
+.claude/

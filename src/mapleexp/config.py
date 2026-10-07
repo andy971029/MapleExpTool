@@ -160,7 +160,8 @@ class CaptureConfig:
     window_title_contains: str = "新楓之谷"
     # 若標題比對不到，可直接指定 exe 名稱。
     process_name: str = "Maplestory_Classic.exe"
-    # "auto" | "printwindow" | "screen"
+    # "auto" | "wgc" | "screen"。auto 先試 WGC，沒裝或失敗才退到 screen。
+    # 兩個後端都不會碰到遊戲程序（WGC 走 DWM、screen 讀桌面 DC）。
     backend: str = "auto"
 
 

@@ -401,7 +401,7 @@ src/mapleexp/
 ├── gamedata.py              讀客戶端 UnityFS bundle，取出官方地圖清單
 ├── testfont.py              自我測試用的內建點陣字型
 ├── storage.py               SQLite
-├── win32/                   ctypes 綁定、視窗查找、擷取（WGC / screen / PrintWindow）
+├── win32/                   ctypes 綁定、視窗查找、擷取（WGC / screen）
 ├── vision/                  二值化、切割、模板比對、面板偵測、OCR、身分辨識、PNG
 ├── core/                    解析、等級經驗表、追蹤狀態機、統計、場次管線、地圖／職業名稱比對
 └── ui/                      校準精靈、置頂浮窗、結束視窗、更新提示

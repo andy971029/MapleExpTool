@@ -1,6 +1,6 @@
 """視窗畫面擷取。
 
-三個後端，依可靠度排序：
+兩個後端，依可靠度排序：
 
 ``wgc``（預設，需要 ``windows-capture``）
     Windows Graphics Capture。要的是視窗在 DWM 裡的合成結果，所以
@@ -11,18 +11,19 @@
     被蓋住時抓到的是上層視窗的像素，所以每次都會先用 :func:`is_region_visible`
     驗證歸屬。沒裝 windows-capture 時用這個。
 
-``printwindow``
-    請視窗自己畫到我們的 DC。實測這個遊戲**不支援**（直接回傳失敗），
-    留著只是給其他應用當後路。
-
 ``auto``（預設）依序往下退，全部失敗才回報擷取失敗 ——
 讓追蹤器進入暫停，而不是記下錯誤的數字。
+
+**為什麼沒有 PrintWindow。** 曾經有第三個後端 ``printwindow``，請視窗自己畫到我們
+的 DC。它對這個遊戲從來沒成功過（Unity + D3D11 直接回傳失敗），而且它是這整個程式
+唯一會**對遊戲視窗送訊息**（WM_PRINT）的地方 —— 上面兩個後端一個透過 DWM、一個讀
+桌面 DC，都不會碰到遊戲程序。一條沒用、又是唯一會碰到遊戲的路，拿掉。
+舊設定檔若還寫著 ``printwindow`` 會自動當成 ``auto``。
 """
 
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,8 +33,6 @@ from .api import (
     BI_RGB,
     BITMAPINFO,
     DIB_RGB_COLORS,
-    PW_CLIENTONLY,
-    PW_RENDERFULLCONTENT,
     SRCCOPY,
     enable_dpi_awareness,
     gdi32,
@@ -51,7 +50,7 @@ from .windows import (
 # 取樣後的像素極差小於此值就視為「空白畫面」（後端沒真的畫出東西）。
 BLANK_RANGE_THRESHOLD = 4
 
-BACKENDS = ("auto", "wgc", "screen", "printwindow")
+BACKENDS = ("auto", "wgc", "screen")
 
 
 class CaptureError(RuntimeError):
@@ -242,8 +241,7 @@ class WindowCapturer:
                 return None
             return self._blit_screen(screen_rect)
 
-        full = self._print_window(width, height)
-        return full[top:bottom, left:right]
+        raise CaptureError(f"未知的擷取後端：{backend}")
 
     def _backend_order(self) -> list[str]:
         if self.backend != "auto":
@@ -251,7 +249,7 @@ class WindowCapturer:
         order = []
         if WGC_AVAILABLE and not self._wgc_failed:
             order.append("wgc")
-        order.extend(["screen", "printwindow"])
+        order.append("screen")
         return order
 
     # ---------------------------- WGC ---------------------------------- #
@@ -319,13 +317,6 @@ class WindowCapturer:
             user32.ReleaseDC(None, screen_dc)
         if not ok:
             raise CaptureError(f"BitBlt 失敗 (GetLastError={ctypes.get_last_error()})")
-        return buffer.to_array()
-
-    def _print_window(self, width: int, height: int) -> np.ndarray:
-        buffer = self._buffer(width, height)
-        flags = wintypes.UINT(PW_CLIENTONLY | PW_RENDERFULLCONTENT)
-        if not user32.PrintWindow(self.hwnd, buffer.dc, flags):
-            raise CaptureError("PrintWindow 失敗（此視窗可能不支援）")
         return buffer.to_array()
 
 
