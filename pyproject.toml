@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maple-exp-tracker"
+dynamic = ["version"]
+license = "MIT"
+description = "楓之谷：經典版 經驗值計算器（視窗截圖 + 字元模板比對）"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    # Windows Graphics Capture：視窗模式、全螢幕、被遮住都能擷取。
+    # 沒有它也能跑，但會退回螢幕 BitBlt，要求遊戲畫面沒被蓋住。
+    'windows-capture>=1.4 ; sys_platform == "win32"',
+]
+
+[project.scripts]
+mapleexp = "mapleexp.__main__:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+# 版本號只有一個來源：src/mapleexp/__init__.py。release.cmd 也是讀那裡。
+version = { attr = "mapleexp.__version__" }
+
+[tool.setuptools.package-data]
+# 內建字元模板：有了它，使用者不用自己標字元。
+mapleexp = ["builtin_templates.json"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

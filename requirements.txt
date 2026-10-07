@@ -1,0 +1,8 @@
+numpy>=1.26
+windows-capture>=1.4 ; sys_platform == "win32"
+winrt-runtime>=3.2 ; sys_platform == "win32"
+winrt-Windows.Media.Ocr>=3.2 ; sys_platform == "win32"
+winrt-Windows.Graphics.Imaging>=3.2 ; sys_platform == "win32"
+winrt-Windows.Globalization>=3.2 ; sys_platform == "win32"
+winrt-Windows.Storage.Streams>=3.2 ; sys_platform == "win32"
+lz4>=4.3 ; sys_platform == "win32"

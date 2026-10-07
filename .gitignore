@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# 打包產物
+*.spec.bak
+assets/icon-*.png
