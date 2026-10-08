@@ -495,7 +495,7 @@ function loadHistory() {
 }
 
 function writeHistory() {
-  const rows = Object.entries(segments)
+  const rows = Object.entries(segments).filter(([, seg]) => seg.cumNet > 0)
     .sort((a, b) => (b[1].lastAt || 0) - (a[1].lastAt || 0)).slice(0, HIST_MAX);
   try {
     localStorage.setItem(HIST_KEY, JSON.stringify(Object.fromEntries(rows)));
@@ -534,7 +534,8 @@ function trackHistory(out) {
   if (out.job) seg.job = out.job;
   if (out.level != null) seg.level = out.level;
   if (out.map_name) seg.mapName = out.map_name;
-  if (d.active > 0 || d.idle > 0) { seg.lastAt = Date.now(); dirty = true; }
+  if (d.active > 0 || d.idle > 0) seg.lastAt = Date.now();
+  if (d.net > 0) dirty = true;      // 沒累計到經驗就不觸發存檔
   if (dirty && Date.now() - lastAutosave > AUTOSAVE_MS) {
     saveCurrent();
     renderHistory();
@@ -544,10 +545,6 @@ function trackHistory(out) {
 function saveCurrent() {
   lastAutosave = Date.now();
   if (!dirty) return;
-  // 還沒累計到任何時間的空段不留。
-  for (const [key, seg] of Object.entries(segments)) {
-    if (!seg.activeSec && !seg.idleSec) delete segments[key];
-  }
   if (writeHistory()) dirty = false;
   else log("存檔失敗：瀏覽器不允許寫入 localStorage。");
 }
@@ -558,7 +555,7 @@ function fmtDuration(sec) {
 }
 
 function renderHistory() {
-  const rows = Object.entries(segments).sort((x, y) => (y[1].lastAt || 0) - (x[1].lastAt || 0));
+  const rows = Object.entries(segments).filter(([, seg]) => seg.cumNet > 0).sort((x, y) => (y[1].lastAt || 0) - (x[1].lastAt || 0));
   const body = $("hist-body");
   body.textContent = "";
   $("hist-note").textContent = rows.length
