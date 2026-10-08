@@ -395,8 +395,7 @@ class WebSession:
                     self.map_status = ""
                     return
         read = [(c[0] if c else "") for c in texts]
-        self.map_status = "標題列讀到「" + "」「".join(t.replace("
-", "")[:8] for t in read) + "」，都不是「小地圖」"
+        self.map_status = "標題列讀到「" + "」「".join(t.replace("\n", "")[:8] for t in read) + "」，都不是「小地圖」"
 
     def _maybe_request_map_name(self) -> None:
         image = self.map_watcher.image
