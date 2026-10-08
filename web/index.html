@@ -155,7 +155,7 @@
         <div class="bar"><div id="bar-fill"></div></div>
         <div class="bar-text" id="bar-text">-- / --</div>
         <dl class="row4">
-          <div><dt>升級剩餘時間 <span id="eta-window"></span></dt><dd id="eta">--</dd></div>
+          <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
           <div><dt>還差</dt><dd id="remaining">--</dd></div>
           <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
           <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
@@ -445,7 +445,6 @@ function render(out, elapsedMs) {
   $("events").textContent = `${out.levelups} / ${out.deaths}`;
   $("times").textContent = `${out.active_text} / ${out.idle_text}`;
   $("eta").textContent = out.eta_text;
-  $("eta-window").textContent = out.eta_window ? `（${out.eta_window}窗）` : "";
   $("remaining").textContent = out.remaining == null ? "--" : out.remaining.toLocaleString();
 
   const pct = out.exp_pct == null ? null : out.exp_pct;
