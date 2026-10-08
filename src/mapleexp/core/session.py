@@ -17,7 +17,14 @@ from ..config import Config
 from ..vision import ocr, pngio
 from .. import gamedata
 from . import jobvocab, mapvocab
-from ..vision.identity import Identity, LevelReader, MapWatcher, fingerprint, scan
+from ..vision.identity import (
+    Identity,
+    LevelReader,
+    MapWatcher,
+    fingerprint,
+    scan,
+    text_bands,
+)
 from ..vision.panels import PanelTracker
 from ..vision.reader import StatusReader
 from ..vision.templates import TemplateSet
@@ -502,7 +509,7 @@ class TrackingSession:
         ``槍騎兵`` 被讀成 ``搶騎兵`` 的實際紀錄，一個字的差距靠編輯距離就能修回來。
         角色名沒有清單可比（而且可能含 ``卍`` 這類符號），讀到什麼就是什麼。
         """
-        bands = _text_bands(image)
+        bands = text_bands(image)
         if not bands:
             return
         texts = []
@@ -799,24 +806,3 @@ class TrackingSession:
             self.capturer.close()
             self.capturer = None
 
-
-def _text_bands(image, min_height: int = 5) -> list[tuple[int, int]]:
-    """把一塊畫面依「有沒有亮像素」切成一行一行。"""
-    import numpy as np
-
-    from ..vision.preprocess import to_luma
-
-    luma = to_luma(image)
-    rows = luma >= max(120, int(luma.mean()) + 20)
-    occupied = rows.any(axis=1)
-    bands: list[tuple[int, int]] = []
-    start: int | None = None
-    for y in range(len(occupied) + 1):
-        hot = y < len(occupied) and bool(occupied[y])
-        if hot and start is None:
-            start = y
-        elif not hot and start is not None:
-            if y - start >= min_height:
-                bands.append((max(0, start - 1), min(len(occupied), y + 1)))
-            start = None
-    return bands

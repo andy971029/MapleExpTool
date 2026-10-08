@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import ocr
-from .preprocess import binarize, despeckle
+from .preprocess import binarize, despeckle, to_luma
 from .segment import column_runs, label_components, segment
 from .templates import TemplateSet
 
@@ -263,7 +263,7 @@ class LevelReader:
     def read(self, zone: LevelZone | None) -> int | None:
         if zone is None or not zone.digits:
             return None
-        value = self._read_templates(zone)
+        value = self.read_templates(zone)
         if value is not None:
             self.level = value
             return value
@@ -283,7 +283,7 @@ class LevelReader:
         self.level = value
         return value
 
-    def _read_templates(self, zone: LevelZone) -> int | None:
+    def read_templates(self, zone: LevelZone) -> int | None:
         chars = []
         for digit in zone.digits:
             match = self.templates.match(digit, min_score=0.85, min_margin=0.03)
@@ -607,6 +607,24 @@ class MapWatcher:
             self.image = self._candidate_image
             return True
         return False
+
+
+def text_bands(image: np.ndarray, min_height: int = 5) -> list[tuple[int, int]]:
+    """把一塊畫面依「有沒有亮像素」切成一行一行。"""
+    luma = to_luma(image)
+    rows = luma >= max(120, int(luma.mean()) + 20)
+    occupied = rows.any(axis=1)
+    bands: list[tuple[int, int]] = []
+    start: int | None = None
+    for y in range(len(occupied) + 1):
+        hot = y < len(occupied) and bool(occupied[y])
+        if hot and start is None:
+            start = y
+        elif not hot and start is not None:
+            if y - start >= min_height:
+                bands.append((max(0, start - 1), min(len(occupied), y + 1)))
+            start = None
+    return bands
 
 
 @dataclass
