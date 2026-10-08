@@ -129,6 +129,8 @@ class WebSession:
         self._ocr_outbox: list[dict] = []
         self._ocr_inflight: dict[str, dict] = {}
         self._ocr_ready = False
+        # 每一項資料「從畫面哪一塊讀來的」，頁面拿去裁放大圖，讓人肉眼核對辨識有沒有看對。
+        self._rois: dict[str, tuple[int, int, int, int] | None] = {"level": None, "job": None, "name": None}
 
     # ------------------------------------------------------------------ #
 
@@ -198,6 +200,8 @@ class WebSession:
         if frame is None or rect is None:
             return
         found = ident.scan(frame, None, exp_rect=rect)
+        self._rois["level"] = found.level_rect
+        self._rois["job"], self._rois["name"] = _band_rects(found.name_rect, found.name_image)
 
         zone = found.zone
         if zone is not None and zone.digits:
@@ -317,6 +321,8 @@ class WebSession:
             "job": self.job,
             "character": self.character,
             "ocr": self._take_ocr_outbox(),
+            "rois": {"exp": list(rect) if rect else None,
+                     **{k: list(v) if v else None for k, v in self._rois.items()}},
         }
         if snapshot is None:
             data["state"] = "等待經驗值欄位"
@@ -358,6 +364,21 @@ class WebSession:
             "deaths": snapshot.deaths,
         })
         return json.dumps(data, ensure_ascii=False)
+
+
+def _band_rects(name_rect, name_image):
+    """名牌區塊切出的兩行（職業在上、角色名在下）各自換算成畫面座標。
+
+    OCR 也是照同樣的切法辨識，所以頁面上看到的裁圖就是引擎真正看到的東西。
+    """
+    if name_rect is None or name_image is None:
+        return None, None
+    bands = ident.text_bands(name_image)
+    left, top, right, _bottom = name_rect
+    rects = [(left, top + a, right, top + b) for a, b in bands[:2]]
+    if len(rects) < 2:
+        return None, (rects[0] if rects else None)
+    return rects[0], rects[1]
 
 
 def _window_label(seconds: int) -> str:

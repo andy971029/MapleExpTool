@@ -3,100 +3,204 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MapleExp 網頁版</title>
+<title>MapleExp 儀表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
+  /* 色彩從遊戲本身取：深林綠藍的夜、經驗條的琥珀。亮色版把琥珀壓深，讓字在淺底上仍有對比。 */
   :root {
-    --bg: #14172b; --panel: #1d2140; --panel-2: #262b52; --text: #f1f2f8; --muted: #9ea4c8;
-    --ok: #4fd18b; --idle: #f0a941; --bad: #ef5b5b; --accent: #7aa2ff; --bar: #3b56c9;
+    --ground: #e6ece7; --surface: #f4f8f4; --ink: #12262a; --muted: #566c6e; --line: #bccbc5;
+    --accent: #b5600a; --on-accent: #fff8ec;
+    --ok: #1b7f57; --idle: #a8740f; --bad: #b83a2e;
+    --scope: #0c1517; --scope-line: #1f3236;
+    --display: "Big Shoulders Display", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    --body: "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
   }
-  html, body { margin: 0; background: var(--bg); color: var(--text);
-    font-family: "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif; }
-  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
-  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  button { background: var(--accent); color: #0b0e1f; border: 0; border-radius: 8px;
-    padding: 10px 18px; font-size: 15px; font-weight: 600; cursor: pointer; }
-  button[disabled] { opacity: .45; cursor: default; }
-  button.secondary { background: var(--panel-2); color: var(--text); }
-  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px;
-    border-radius: 999px; background: var(--panel-2); font-size: 14px; }
-  .pill i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d1618; --surface: #142124; --ink: #e3efe9; --muted: #86a09f; --line: #26393c;
+      --accent: #f3b13d; --on-accent: #1a1204;
+      --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
+      --scope: #091012; --scope-line: #1b2d31;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0d1618; --surface: #142124; --ink: #e3efe9; --muted: #86a09f; --line: #26393c;
+    --accent: #f3b13d; --on-accent: #1a1204;
+    --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
+    --scope: #091012; --scope-line: #1b2d31;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--body); }
+  body { line-height: 1.5; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  main { max-width: 1160px; margin: 0 auto; padding: 20px 20px 56px; }
+
+  /* ---------- 頂列 ---------- */
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; padding-bottom: 16px;
+    border-bottom: 2px solid var(--ink); }
+  .mark { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: .04em;
+    line-height: 1; margin-right: auto; }
+  .mark small { display: block; font-family: var(--body); font-weight: 400; font-size: 12px;
+    letter-spacing: 0; color: var(--muted); margin-top: 6px; max-width: 46ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { font: 700 14px var(--body); border: 2px solid var(--accent); background: var(--accent);
+    color: var(--on-accent); padding: 9px 18px; border-radius: 2px; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
+  button.secondary:hover:not([disabled]) { border-color: var(--ink); }
+  button[disabled] { opacity: .4; cursor: default; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono);
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
+  .pill i { width: 9px; height: 9px; background: var(--muted); border-radius: 50%; }
   .pill.active i { background: var(--ok); } .pill.idle i { background: var(--idle); }
   .pill.paused i { background: var(--bad); }
-  .card { background: var(--panel); border-radius: 12px; padding: 16px 18px; margin-top: 16px; }
-  .big { font-size: 40px; font-weight: 700; letter-spacing: .5px; line-height: 1.1; }
-  .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .grid .v { font-size: 20px; font-weight: 600; }
-  .dim { opacity: .45; }
-  .bar { position: relative; height: 26px; background: var(--panel-2); border-radius: 6px;
-    overflow: hidden; margin-top: 8px; }
-  .bar > div { position: absolute; inset: 0 auto 0 0; background: var(--bar); width: 0; }
-  .bar > span { position: absolute; inset: 0; display: flex; align-items: center;
-    justify-content: center; font-size: 14px; font-weight: 600; }
-  .kv { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; }
-  .kv b { font-weight: 600; }
-  #log { font-family: Consolas, monospace; font-size: 12px; color: var(--muted);
-    white-space: pre-wrap; max-height: 160px; overflow: auto; }
-  canvas#roi { image-rendering: pixelated; background: #000; border-radius: 4px;
-    max-width: 100%; display: block; margin-top: 8px; }
+  .warn { color: var(--idle); font-size: 13px; margin: 12px 0 0; }
+
+  /* ---------- 版面 ---------- */
+  .layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 40px; margin-top: 28px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
+  .col { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+  h2 { margin: 0 0 12px; font: 700 12px var(--body); letter-spacing: .14em; color: var(--muted); }
+
+  /* ---------- 速率 ---------- */
+  .rate { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .rate-num { font-family: var(--display); font-weight: 800; font-size: clamp(72px, 12vw, 132px);
+    line-height: .9; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .rate-unit { font-family: var(--display); font-weight: 700; font-size: 26px; color: var(--muted); letter-spacing: .04em; }
+  dl.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; margin: 20px 0 0; }
+  dl.facts > div { border-top: 1px solid var(--line); padding: 10px 0 12px; }
+  dt { font-size: 12px; color: var(--muted); }
+  dd { margin: 2px 0 0; font: 700 28px var(--display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+  /* ---------- 經驗條 ---------- */
+  .lvl { display: flex; align-items: baseline; gap: 8px; }
+  .lvl b { font: 800 48px var(--display); line-height: 1; }
+  .lvl span { color: var(--muted); font-size: 13px; }
+  .lvl .pct { margin-left: auto; font: 700 30px var(--display); color: var(--accent); }
+  .bar { position: relative; height: 22px; margin-top: 10px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
+  .bar > div { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); transition: width .6s ease; }
+  /* 每 10% 一格刻度，蓋在填色上面，不用讀數字也看得出進度 */
+  .bar::after { content: ""; position: absolute; inset: 0; opacity: .7;
+    background: repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), var(--ground) calc(10% - 1px), var(--ground) 10%); }
+  .bar-text { font: 400 12px var(--mono); color: var(--muted); margin-top: 6px; }
+  dl.row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0 20px; margin: 18px 0 0; }
+  dl.row4 > div { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+  dl.row4 dd { font-size: 24px; }
+
+  /* ---------- 辨識來源 ---------- */
+  .tray { display: flex; flex-direction: column; gap: 14px; }
+  .specimen { background: var(--surface); border: 1px solid var(--line); border-left: 4px dashed var(--line);
+    padding: 12px 14px 14px; }
+  .specimen.found { border-left: 4px solid var(--accent); }
+  .sp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .sp-name { font-weight: 700; font-size: 14px; }
+  .sp-rect { font: 400 11px var(--mono); color: var(--muted); text-align: right; }
+  .scope { margin: 10px 0; padding: 8px; min-height: 44px; display: flex; align-items: center;
+    background-color: var(--scope);
+    background-image: linear-gradient(var(--scope-line) 1px, transparent 1px), linear-gradient(90deg, var(--scope-line) 1px, transparent 1px);
+    background-size: 12px 12px; }
+  .scope canvas { image-rendering: pixelated; max-width: 100%; height: auto; display: none; }
+  .found .scope canvas { display: block; }
+  .scope .empty { font: 400 12px var(--mono); color: var(--muted); }
+  .found .scope .empty { display: none; }
+  .sp-value { font: 500 15px var(--mono); overflow-wrap: anywhere; }
+  .sp-value::before { content: "讀到 "; color: var(--muted); font-family: var(--body); font-size: 12px; }
+
+  /* ---------- 診斷 ---------- */
+  table.diag { width: 100%; border-collapse: collapse; font: 400 12px var(--mono); }
+  table.diag td { padding: 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  table.diag td:first-child { color: var(--muted); width: 38%; font-family: var(--body); }
+  table.diag td:last-child { text-align: right; overflow-wrap: anywhere; }
+  #log { font: 400 12px var(--mono); color: var(--muted); white-space: pre-wrap; max-height: 150px; overflow: auto;
+    margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
   video, canvas#frame { display: none; }
-  .warn { color: var(--idle); font-size: 13px; }
+  @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>MapleExp 網頁版（實驗）</h1>
-  <div class="sub">分享遊戲視窗 → 用桌面版同一套模板比對讀經驗值 → 算 EXP/hr。全部在瀏覽器本機執行，畫面不會離開這台電腦。</div>
-
-  <div class="row">
-    <button id="share" disabled>載入 Python 環境…</button>
-    <button id="reset" class="secondary" disabled>重設統計</button>
-    <button id="stop" class="secondary" disabled>停止分享</button>
-    <span id="state" class="pill"><i></i><span>尚未開始</span></span>
-  </div>
+  <header>
+    <div class="mark">MAPLE&nbsp;EXP<small>分享遊戲視窗，用桌面版同一套模板比對讀數字；全部在這台電腦上跑，畫面不會上傳。</small></div>
+    <div class="controls">
+      <button id="share" disabled>載入 Python 環境…</button>
+      <button id="reset" class="secondary" disabled>重設統計</button>
+      <button id="stop" class="secondary" disabled>停止分享</button>
+      <span id="state" class="pill"><i></i><span>尚未開始</span></span>
+    </div>
+  </header>
   <p id="hint" class="warn" hidden></p>
 
-  <div class="card">
-    <div class="label">依最近 10 分鐘預估，每小時經驗</div>
-    <div id="rate-main" class="big">--</div>
-    <div class="grid" style="margin-top:12px">
-      <div><div class="label">依最近 10 分鐘預估，每 30 分鐘</div><div class="v" id="st-half">--</div></div>
-      <div><div class="label">最近 10 分鐘累計經驗</div><div class="v" id="st-recent">--</div></div>
-      <div><div class="label">目前總累計經驗</div><div class="v" id="st-total">--</div></div>
-      <div><div class="label">整場平均每小時</div><div class="v" id="st-average">--</div></div>
+  <div class="layout">
+    <div class="col">
+      <section>
+        <h2>每小時經驗 · 依最近 10 分鐘預估</h2>
+        <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / 小時</span></div>
+        <dl class="facts">
+          <div><dt>依最近 10 分鐘預估，每 30 分鐘</dt><dd id="st-half">--</dd></div>
+          <div><dt>最近 10 分鐘累計經驗</dt><dd id="st-recent">--</dd></div>
+          <div><dt>目前總累計經驗</dt><dd id="st-total">--</dd></div>
+          <div><dt>整場平均每小時</dt><dd id="st-average">--</dd></div>
+        </dl>
+        <div class="note" id="st-note"></div>
+      </section>
+
+      <section>
+        <h2>目前經驗</h2>
+        <div class="lvl"><span>Lv.</span><b id="level">--</b><span class="pct" id="bar-pct">--</span></div>
+        <div class="bar"><div id="bar-fill"></div></div>
+        <div class="bar-text" id="bar-text">-- / --</div>
+        <dl class="row4">
+          <div><dt>升級剩餘時間 <span id="eta-window"></span></dt><dd id="eta">--</dd></div>
+          <div><dt>還差</dt><dd id="remaining">--</dd></div>
+          <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
+          <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
+        </dl>
+      </section>
     </div>
-    <div class="label" style="margin-top:10px" id="st-note"></div>
-  </div>
 
-  <div class="card">
-    <div class="label">目前經驗</div>
-    <div class="bar"><div id="bar-fill"></div><span id="bar-text">-- / -- (--%)</span></div>
-    <div class="kv" style="margin-top:10px"><span>升級剩餘時間</span><b id="eta">--</b></div>
-    <div class="kv"><span>還差</span><b id="remaining">--</b></div>
-    <div class="kv"><span>活躍 / 閒置</span><b id="times">-- / --</b></div>
-    <div class="kv"><span>升級 / 死亡</span><b id="events">0 / 0</b></div>
-  </div>
+    <div class="col">
+      <section>
+        <h2>辨識來源 · 從畫面哪裡讀到的</h2>
+        <div class="tray">
+          <div class="specimen" id="sp-exp">
+            <div class="sp-head"><span class="sp-name">經驗值欄位</span><span class="sp-rect" id="sp-exp-r">尚未找到</span></div>
+            <div class="scope"><canvas id="sp-exp-c"></canvas><span class="empty">等待定位…</span></div>
+            <div class="sp-value" id="sp-exp-v">--</div>
+          </div>
+          <div class="specimen" id="sp-level">
+            <div class="sp-head"><span class="sp-name">等級</span><span class="sp-rect" id="sp-level-r">尚未找到</span></div>
+            <div class="scope"><canvas id="sp-level-c"></canvas><span class="empty">等待定位…</span></div>
+            <div class="sp-value" id="sp-level-v">--</div>
+          </div>
+          <div class="specimen" id="sp-job">
+            <div class="sp-head"><span class="sp-name">職業</span><span class="sp-rect" id="sp-job-r">尚未找到</span></div>
+            <div class="scope"><canvas id="sp-job-c"></canvas><span class="empty">等待定位…</span></div>
+            <div class="sp-value" id="sp-job-v">--</div>
+          </div>
+          <div class="specimen" id="sp-name">
+            <div class="sp-head"><span class="sp-name">角色名</span><span class="sp-rect" id="sp-name-r">尚未找到</span></div>
+            <div class="scope"><canvas id="sp-name-c"></canvas><span class="empty">等待定位…</span></div>
+            <div class="sp-value" id="sp-name-v">--</div>
+          </div>
+        </div>
+        <div class="note">放大是整數倍、不做平滑：你看到的像素就是辨識程式拿到的像素。</div>
+      </section>
 
-  <div class="card">
-    <div class="label">角色</div>
-    <div class="kv"><span>角色名</span><b id="character">--</b></div>
-    <div class="kv"><span>職業</span><b id="job">--</b></div>
-    <div class="kv"><span>等級</span><b id="level">--</b></div>
-    <div class="kv"><span>文字辨識引擎</span><b id="ocr-state">尚未載入</b></div>
-  </div>
-
-  <div class="card">
-    <div class="label">辨識狀態</div>
-    <div class="kv"><span>畫面大小</span><b id="frame-size">--</b></div>
-    <div class="kv"><span>經驗值欄位位置</span><b id="rect">--</b></div>
-    <div class="kv"><span>讀到的字串</span><b id="raw">--</b></div>
-    <div class="kv"><span>取樣 / 失敗 / 每格耗時</span><b id="stats">0 / 0 / --</b></div>
-    <div class="label" style="margin-top:8px">經驗值欄位（放大 4 倍，這就是模板比對看到的像素）</div>
-    <canvas id="roi" width="320" height="60"></canvas>
-    <div class="label" style="margin-top:8px">訊息</div>
-    <div id="log"></div>
+      <section>
+        <h2>引擎狀態</h2>
+        <table class="diag">
+          <tr><td>畫面大小</td><td id="frame-size">--</td></tr>
+          <tr><td>取樣</td><td id="stats">--</td></tr>
+          <tr><td>文字辨識引擎</td><td id="ocr-state">尚未載入</td></tr>
+        </table>
+        <div id="log"></div>
+      </section>
+    </div>
   </div>
 
   <video id="video" autoplay muted playsinline></video>
@@ -115,8 +219,6 @@ const $ = (id) => document.getElementById(id);
 const video = $("video");
 const frame = $("frame");
 const frameCtx = frame.getContext("2d", { willReadFrequently: true });
-const roiCtx = $("roi").getContext("2d");
-roiCtx.imageSmoothingEnabled = false;
 
 let pyodide = null;
 let session = null;
@@ -299,24 +401,39 @@ function tick() {
   if (ocr) for (const req of out.ocr || []) runOcr(req);
 }
 
+// 每一塊辨識來源都裁出來放大，格式一致：能看出引擎真正拿到的像素，也能核對讀對沒有。
+const SPECIMEN_TARGET_W = 300;
+function drawSpecimen(key, rect, value) {
+  const box = $("sp-" + key);
+  const canvas = $("sp-" + key + "-c");
+  const found = !!rect;
+  box.classList.toggle("found", found);
+  $("sp-" + key + "-v").textContent = value || "--";
+  $("sp-" + key + "-r").textContent = found
+    ? `(${rect[0]}, ${rect[1]}) – (${rect[2]}, ${rect[3]})  ${rect[2] - rect[0]}×${rect[3] - rect[1]}`
+    : "尚未找到";
+  if (!found) return;
+  const [l, t, r, b] = rect;
+  const rw = r - l, rh = b - t;
+  if (rw <= 0 || rh <= 0) return;
+  // 整數倍放大才不會糊掉邊緣；高度封頂避免等級那種小方塊被放得過大。
+  const scale = Math.max(1, Math.min(12, Math.floor(SPECIMEN_TARGET_W / rw), Math.floor(90 / rh) || 1));
+  canvas.width = rw * scale; canvas.height = rh * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(frame, l, t, rw, rh, 0, 0, rw * scale, rh * scale);
+}
+
 function render(out, elapsedMs) {
   log(out.message);
   $("frame-size").textContent = out.frame_size ? `${out.frame_size[0]} × ${out.frame_size[1]}` : "--";
-  $("raw").textContent = out.raw_exp || "--";
-  $("character").textContent = out.character || "--";
-  $("job").textContent = out.job || "--";
-  $("level").textContent = out.level == null ? "--" : `Lv. ${out.level}`;
+  $("level").textContent = out.level == null ? "--" : out.level;
 
-  if (out.rect) {
-    const [l, t, r, b] = out.rect;
-    $("rect").textContent = `(${l}, ${t}) – (${r}, ${b})`;
-    const rw = r - l, rh = b - t;
-    $("roi").width = rw * 4; $("roi").height = rh * 4;
-    roiCtx.imageSmoothingEnabled = false;
-    roiCtx.drawImage(frame, l, t, rw, rh, 0, 0, rw * 4, rh * 4);
-  } else {
-    $("rect").textContent = "尚未找到";
-  }
+  const rois = out.rois || {};
+  drawSpecimen("exp", rois.exp, out.raw_exp);
+  drawSpecimen("level", rois.level, out.level == null ? "" : `Lv. ${out.level}`);
+  drawSpecimen("job", rois.job, out.job);
+  drawSpecimen("name", rois.name, out.character);
 
   if (!out.state_key) {
     setState(out.state, "");
@@ -324,25 +441,27 @@ function render(out, elapsedMs) {
   }
   setState(out.state, out.state_key);
 
-  $("stats").textContent = `${out.samples} / ${out.misses} / ${elapsedMs.toFixed(0)} ms`;
+  $("stats").textContent = `${out.samples} 筆 · 失敗 ${out.misses} · ${elapsedMs.toFixed(0)} ms/格`;
   $("events").textContent = `${out.levelups} / ${out.deaths}`;
   $("times").textContent = `${out.active_text} / ${out.idle_text}`;
-  $("eta").textContent = out.eta_text + (out.eta_window ? `（${out.eta_window}窗）` : "");
+  $("eta").textContent = out.eta_text;
+  $("eta-window").textContent = out.eta_window ? `（${out.eta_window}窗）` : "";
   $("remaining").textContent = out.remaining == null ? "--" : out.remaining.toLocaleString();
 
   const pct = out.exp_pct == null ? null : out.exp_pct;
   $("bar-fill").style.width = pct == null ? "0" : `${Math.min(100, pct)}%`;
-  $("bar-text").textContent = `${out.exp_text} / ${out.need_text} (${pct == null ? "--" : pct.toFixed(2)}%)`;
+  $("bar-pct").textContent = pct == null ? "--" : pct.toFixed(2) + "%";
+  $("bar-text").textContent = `${out.exp_text} / ${out.need_text}`;
 
   const st = out.stats;
-  $("rate-main").textContent = st.per_hour;
+  $("rate-main").textContent = st.per_hour.replace("/h", "");
   $("st-half").textContent = st.per_half_hour;
   $("st-recent").textContent = st.recent;
   $("st-total").textContent = st.total;
   $("st-average").textContent = st.average;
   // 剛開始不足 10 分鐘時，「最近」其實是「開始到現在」，要讓人看得出來。
   $("st-note").textContent = st.recent_valid
-    ? `最近 10 分鐘窗實際涵蓋 ${st.span_text}（只算活躍時間，閒置不計）。`
+    ? `近 10 分鐘窗實際涵蓋 ${st.span_text}，只算活躍時間，閒置不計。`
     : "資料還不夠，需要至少兩筆經驗增加。";
 }
 

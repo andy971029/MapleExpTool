@@ -93,6 +93,11 @@ class TestWebSession(unittest.TestCase):
         self.assertFalse(out["stats"]["recent_valid"])
         self.assertEqual(out["stats"]["recent"], "--")
 
+    def test_payload_lists_every_read_region(self):
+        out = self.feed(self.make_session(), "623456[12.34%]")
+        self.assertEqual(set(out["rois"]), {"exp", "level", "job", "name"})
+        self.assertEqual(out["rois"]["exp"], out["rect"])
+
     def test_payload_before_any_frame_is_safe(self):
         session = self.make_session()
         out = json.loads(session.tick())
