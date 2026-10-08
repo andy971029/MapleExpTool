@@ -94,6 +94,11 @@
     border-top: 3px solid var(--ink); padding: 18px 22px 20px; }
   .layout { align-items: stretch; }
   .ident { margin-top: 20px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .sec-head h2 { margin: 0; padding: 0; border: 0; }
+  .boost { font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .boost:has(input:checked) { color: var(--accent); font-weight: 700; }
   .layout > section > h2, #history h2 { padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
   #history { margin-top: 20px; }
   #history .hist-head { padding-bottom: 10px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
@@ -184,7 +189,10 @@
 
   <div class="layout">
     <section>
-      <h2>收益速率</h2>
+      <div class="sec-head">
+        <h2>收益速率</h2>
+        <label class="boost" title="試算經驗加倍券：速率、累計經驗與升級倒數都以 1.5 倍顯示，不影響歷史紀錄"><input type="checkbox" id="boost"> 經驗值 1.5 倍</label>
+      </div>
       <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / hr</span></div>
       <dl class="facts">
         <div><dt>依最近 10 min 預估</dt><dd id="st-half">--</dd></div>
@@ -327,6 +335,7 @@ async function boot() {
     const bridge = await (await fetch("bridge.py", { cache: "no-store" })).text();
     pyodide.runPython(bridge);
     session = pyodide.runPython("WebSession()");
+    session.set_boost($("boost").checked ? 1.5 : 1);
     // 地圖清單快照（scripts/export_mapvocab.py 匯出）；載不到就退回原始 OCR 文字。
     try {
       const vocab = await fetch("mapvocab.json", { cache: "no-store" });
@@ -648,6 +657,9 @@ $("hist-export").addEventListener("click", () => {
   a.download = "mapleexp-history.json";
   a.click();
   URL.revokeObjectURL(a.href);
+});
+$("boost").addEventListener("change", () => {
+  if (session) session.set_boost($("boost").checked ? 1.5 : 1);
 });
 $("hist-clear").addEventListener("click", () => {
   if (!confirm("確定清除所有歷史紀錄？")) return;

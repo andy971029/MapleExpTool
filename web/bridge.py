@@ -150,6 +150,7 @@ class WebSession:
         self.character = ""
         self._level_misses: dict[str, int] = {}
         self._level_last_try = 0.0
+        self.boost = 1.0
         self.level_status = ""
         self._character_key = ""
         self._character_checked_at = -CHARACTER_RECHECK_SEC
@@ -178,6 +179,10 @@ class WebSession:
 
     def feed_frame(self, rgba, width: int, height: int) -> None:
         self.capturer.set_frame(rgba, width, height)
+
+    def set_boost(self, factor: float) -> None:
+        """經驗加倍券試算：只放大「收益」類的顯示數字，剩餘經驗與存檔用的原始累計不動。"""
+        self.boost = max(1.0, float(factor))
 
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
@@ -590,12 +595,14 @@ class WebSession:
         average = (
             snapshot.cum_net / (snapshot.active_sec / 3600.0) if snapshot.active_sec > 0 else None
         )
+        k = self.boost
+        scaled = lambda v: v * k if v is not None else None  # noqa: E731
         stats = {
-            "per_hour": format_rate(per_hour),
-            "per_half_hour": format_exp(per_hour / 2 if per_hour is not None else None),
-            "total": format_exp(snapshot.cum_net),
-            "average": format_rate(average),
-            "recent": format_exp(recent.exp_gained if recent and recent.valid else None),
+            "per_hour": format_rate(scaled(per_hour)),
+            "per_half_hour": format_exp(per_hour * k / 2 if per_hour is not None else None),
+            "total": format_exp(snapshot.cum_net * k),
+            "average": format_rate(scaled(average)),
+            "recent": format_exp(scaled(recent.exp_gained) if recent and recent.valid else None),
             "recent_valid": bool(recent and recent.valid),
             "window_text": _window_label(RATE_WINDOW_SEC),
             "span_text": format_elapsed(recent.span_sec) if recent and recent.valid else "--",
@@ -611,7 +618,7 @@ class WebSession:
             "need_text": format_exp(snapshot.need),
             "active_text": format_elapsed(snapshot.active_sec),
             "idle_text": format_elapsed(snapshot.idle_sec),
-            "eta_text": _format_eta(snapshot.eta_sec),
+            "eta_text": _format_eta(snapshot.eta_sec / k if snapshot.eta_sec is not None else None),
             "eta_window": _window_label(snapshot.eta_window) if snapshot.eta_sec else "",
             "stats": stats,
             # 存檔用的原始數字；畫面上的字串格式化過，不能拿來存。
