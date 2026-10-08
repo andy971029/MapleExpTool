@@ -307,8 +307,13 @@ class TestIdentityOcr(unittest.TestCase):
 
     def test_level_that_is_not_a_number_is_rejected(self):
         session = self.make_session()
-        session._finish_level(FakeZone(), ["45", "4x", "45"])
+        session._finish_level(FakeZone(), ["4x", "--", "45"])
         self.assertIsNone(session.level)
+
+    def test_truncated_answer_does_not_veto_the_others(self):
+        session = self.make_session()
+        session._finish_level(FakeZone(), ["45", "5", "45", "45"])
+        self.assertEqual(session.level, 45)
 
     def test_level_digit_count_mismatch_is_not_taught(self):
         """切出兩個字形、辨識卻說是三位數：用這個教模板會把錯的字形記起來。"""

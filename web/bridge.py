@@ -77,6 +77,7 @@ MAP_NAME_RETRY_SEC = 5.0
 MAP_OCR_SCALES = (3, 4, 6)
 # 同一組字形辨識失敗幾次就放棄（字形變了會重新計算）。
 OCR_RETRY_LIMIT = 3
+LEVEL_SLOW_RETRY_SEC = 10.0
 
 
 def _png_data_url(gray: np.ndarray) -> str:
@@ -148,6 +149,8 @@ class WebSession:
         self.job = ""
         self.character = ""
         self._level_misses: dict[str, int] = {}
+        self._level_last_try = 0.0
+        self.level_status = ""
         self._character_key = ""
         self._character_checked_at = -CHARACTER_RECHECK_SEC
         self._ocr_outbox: list[dict] = []
@@ -312,7 +315,7 @@ class WebSession:
             value = self.level_reader.read_templates(zone)
             if value is not None:
                 self.level = value
-            elif self._ocr_ready and self._level_misses.get(zone.shape_key, 0) < OCR_RETRY_LIMIT:
+            elif self._ocr_ready and self._level_may_retry(zone.shape_key):
                 self._request_level(zone)
 
         if found.name_image is not None and self._ocr_ready:
@@ -488,25 +491,40 @@ class WebSession:
         elif rid.startswith("map:"):
             self._finish_map_name(ctx, texts)
 
+    def _level_may_retry(self, key: str) -> bool:
+        """連續讀不出來幾次之後改成慢慢重試，而不是永遠放棄。
+
+        永遠放棄的話，剛開頁面那幾格（串流還在編碼、畫面糊）失敗三次，等級就一輩子
+        顯示 --，直到字形剛好變了才再試。
+        """
+        if self._level_misses.get(key, 0) < OCR_RETRY_LIMIT:
+            return True
+        return time.monotonic() - self._level_last_try >= LEVEL_SLOW_RETRY_SEC
+
     def _finish_level(self, zone, texts) -> None:
-        """每個倍率各給一個答案，要全部同意才採用（桌面版 read_level_by_ocr 同一個規則）。"""
-        answers = set()
-        for text in texts or []:
-            cleaned = (text or "").translate(ident._DIGIT_LOOKALIKES).strip()
-            if not cleaned:
-                continue
-            if not cleaned.isdigit() or not 1 <= len(cleaned) <= 3 or not 1 <= int(cleaned) <= ident.MAX_LEVEL:
-                answers.add(None)       # 讀出不像等級的東西：整次不信
-                continue
-            answers.add(int(cleaned))
-        if len(answers) != 1 or None in answers:
+        """每個倍率各給一個答案，同樣位數的答案要至少兩個、且全部一致才採用。
+
+        位數用 ``zone.digits``（色鍵切出來的字形數）當基準：Tesseract 在糊掉的畫面上常
+        只回答半個數字（實測 59 在 8 倍讀成 9），這種答案位數不對，直接當作沒回答，
+        而不是讓它否決其他倍率的正確答案。位數對卻互相矛盾的才算分歧，整次不信。
+        """
+        self._level_last_try = time.monotonic()
+        expected = len(zone.digits)
+        raw = [(t or "").translate(ident._DIGIT_LOOKALIKES).strip() for t in texts or []]
+        valid = [int(t) for t in raw if t.isdigit() and 1 <= int(t) <= ident.MAX_LEVEL]
+        exact = [v for v in valid if len(str(v)) == expected]
+        self.level_status = "OCR：" + " / ".join(t or "空" for t in raw)
+        # 位數對的答案優先；一個都沒有時，全體一致的答案仍採用但不拿來教模板
+        # （字形切分很可能是錯的，教進去會記住錯字形）。
+        answers = exact or valid
+        if len(answers) < 2 or len(set(answers)) != 1:
             key = zone.shape_key
             self._level_misses[key] = self._level_misses.get(key, 0) + 1
             return
-        value = answers.pop()
+        value = answers[0]
         self._level_misses.pop(zone.shape_key, None)
-        # 字數對得上才教：對不上代表切字形跟辨識看到的不是同一回事。
-        if len(str(value)) == len(zone.digits):
+        self.level_status = ""
+        if exact:
             self.level_reader.teach(zone, value)
         self.level = value
 
@@ -557,6 +575,7 @@ class WebSession:
             "character": self.character,
             "map_name": self.map_name,
             "map_id": self.map_id,
+            "level_status": self.level_status if self.level is None else "",
             "map_status": self.map_status if self._minimap_body is None else "",
             "ocr": self._take_ocr_outbox(),
             "rois": {"exp": list(rect) if rect else None,

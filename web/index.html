@@ -653,7 +653,7 @@ function render(out, elapsedMs) {
 
   const rois = out.rois || {};
   drawSpecimen("exp", rois.exp, out.raw_exp);
-  drawSpecimen("level", rois.level, out.level == null ? "" : `Lv. ${out.level}`);
+  drawSpecimen("level", rois.level, out.level == null ? (out.level_status || "") : `Lv. ${out.level}`);
   drawSpecimen("job", rois.job, out.job);
   drawSpecimen("name", rois.name, out.character);
   drawSpecimen("map", rois.map, out.map_name);
