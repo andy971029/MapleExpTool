@@ -154,6 +154,8 @@
   table.hist { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
   table.hist th { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); padding: 6px 14px 6px 0; }
   table.hist td { border-top: 1px solid var(--line); padding: 8px 14px 8px 0; font-variant-numeric: tabular-nums; }
+  table.hist th.sortable { cursor: pointer; user-select: none; }
+  table.hist th.sortable:hover { color: var(--ink); }
   table.hist td.num, table.hist th.num { text-align: right; }
   table.hist tr.live td { color: var(--accent); }
   table.hist button { padding: 0 6px; font-size: 12px; }
@@ -215,7 +217,7 @@
     </div>
     <div class="hist-wrap">
       <table class="hist">
-        <thead><tr><th>最近</th><th>角色</th><th>地圖</th><th class="num">等級</th><th class="num">活躍</th><th class="num">累計經驗</th><th class="num">平均 EXP / hr</th><th class="num">升級 / 死亡</th><th></th></tr></thead>
+        <thead><tr id="hist-head-row"></tr></thead>
         <tbody id="hist-body"></tbody>
       </table>
     </div>
@@ -554,32 +556,72 @@ function fmtDuration(sec) {
   return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
+const pad2 = (n) => String(n).padStart(2, "0");
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+const avgRate = (r) => (r.activeSec > 0 ? Math.round(r.cumNet / (r.activeSec / 3600)) : null);
+// sort 回傳排序用的值（數字或字串），text 回傳顯示文字；null 一律排最後。
+const HIST_COLS = [
+  { label: "日期", sort: (r) => r.lastAt || 0, text: (r) => fmtDate(r.lastAt) },
+  { label: "角色", sort: (r) => r.character, text: (r) => r.character },
+  { label: "職業", sort: (r) => r.job || null, text: (r) => r.job },
+  { label: "地圖", sort: (r) => r.mapName || null, text: (r) => r.mapName || (r.mapId ? "" : UNKNOWN_MAP) },
+  { label: "等級", num: true, sort: (r) => r.level, text: (r) => r.level },
+  { label: "活躍", num: true, sort: (r) => r.activeSec, text: (r) => fmtDuration(Math.round(r.activeSec)) },
+  { label: "累計經驗", num: true, sort: (r) => r.cumNet, text: (r) => Math.round(r.cumNet).toLocaleString() },
+  { label: "平均 EXP / hr", num: true, sort: avgRate, text: (r) => (avgRate(r) ?? "").toLocaleString() },
+  { label: "升級", num: true, sort: (r) => r.levelups, text: (r) => r.levelups },
+  { label: "死亡", num: true, sort: (r) => r.deaths, text: (r) => r.deaths },
+];
+let histSort = { col: 0, dir: -1 };
+
+function buildHistoryHead() {
+  const tr = $("hist-head-row");
+  HIST_COLS.forEach((c, i) => {
+    const th = document.createElement("th");
+    if (c.num) th.className = "num";
+    th.classList.add("sortable");
+    th.tabIndex = 0;
+    th.addEventListener("click", () => {
+      histSort = { col: i, dir: histSort.col === i ? -histSort.dir : (c.num || i === 0 ? -1 : 1) };
+      renderHistory();
+    });
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); th.click(); } });
+    tr.appendChild(th);
+  });
+  tr.appendChild(document.createElement("th"));
+}
+
 function renderHistory() {
-  const rows = Object.entries(segments).filter(([, seg]) => seg.cumNet > 0).sort((x, y) => (y[1].lastAt || 0) - (x[1].lastAt || 0));
+  const col = HIST_COLS[histSort.col];
+  [...$("hist-head-row").children].forEach((th, i) => {
+    if (i >= HIST_COLS.length) return;
+    const on = i === histSort.col;
+    th.textContent = HIST_COLS[i].label + (on ? (histSort.dir > 0 ? " ▲" : " ▼") : "");
+    th.setAttribute("aria-sort", on ? (histSort.dir > 0 ? "ascending" : "descending") : "none");
+  });
+  const rows = Object.entries(segments).filter(([, seg]) => seg.cumNet > 0).sort((x, y) => {
+    const a = col.sort(x[1]), b = col.sort(y[1]);
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    const c = typeof a === "string" ? a.localeCompare(b, "zh-Hant") : a - b;
+    return c * histSort.dir;
+  });
   const body = $("hist-body");
   body.textContent = "";
   $("hist-note").textContent = rows.length
     ? `共 ${rows.length} 段（角色 × 地圖），只存在這個瀏覽器。`
     : "還沒有紀錄。開始統計後每 30 秒、按停止分享或關閉分頁時會自動存。";
-  const when = (ms) => new Date(ms).toLocaleString("zh-Hant", { hour12: false, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   for (const [key, r] of rows) {
     const tr = document.createElement("tr");
     if (key === liveKey) tr.className = "live";
-    const avg = r.activeSec > 0 ? Math.round(r.cumNet / (r.activeSec / 3600)) : null;
-    const cells = [
-      when(r.lastAt),
-      [r.character, r.job].filter(Boolean).join(" · "),
-      r.mapName || (r.mapId ? "" : UNKNOWN_MAP) || "--",
-      r.level ?? "--",
-      fmtDuration(Math.round(r.activeSec)),
-      Math.round(r.cumNet).toLocaleString(),
-      avg == null ? "--" : avg.toLocaleString(),
-      `${r.levelups} / ${r.deaths}`,
-    ];
-    cells.forEach((text, i) => {
+    HIST_COLS.forEach((c) => {
       const td = document.createElement("td");
-      td.textContent = text || "--";
-      if (i >= 3) td.className = "num";
+      td.textContent = c.text(r) || "--";
+      if (c.num) td.className = "num";
       tr.appendChild(td);
     });
     const del = document.createElement("td");
@@ -597,6 +639,7 @@ function renderHistory() {
     body.appendChild(tr);
   }
 }
+buildHistoryHead();
 
 $("hist-export").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(Object.values(segments), null, 2)], { type: "application/json" });
