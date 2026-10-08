@@ -137,12 +137,22 @@ class WebSession:
         if auto.ok and self.reader is None:
             self.reader = StatusReader(self.capturer, self.cfg.reader, self.templates)
 
+    def _current_rect(self) -> tuple[int, int, int, int] | None:
+        """用目前這張畫面的尺寸重算欄位位置。ROI 是距底部中央的偏移，視窗縮放後
+        reader 仍讀得到，但定位時記下的像素座標已經過期；拿舊座標去畫放大圖會是空的。"""
+        frame = self.capturer.frame
+        roi = self.cfg.reader.exp_roi
+        if frame is None or not roi.is_set():
+            return self.rect
+        return roi.to_pixels(int(frame.shape[1]), int(frame.shape[0]))
+
     def _payload(self, snapshot, raw_exp: str = "") -> str:
         frame = self.capturer.frame
+        rect = self._current_rect()
         data = {
             "located": self.reader is not None,
             "message": self.message,
-            "rect": list(self.rect) if self.rect else None,
+            "rect": list(rect) if rect else None,
             "frame_size": [int(frame.shape[1]), int(frame.shape[0])] if frame is not None else None,
             "raw_exp": raw_exp,
         }

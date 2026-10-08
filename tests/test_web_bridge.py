@@ -82,6 +82,20 @@ class TestWebSession(unittest.TestCase):
         self.assertEqual(session.rect, rect)
         self.assertEqual(out["exp_abs"], 623456)
 
+    def test_rect_follows_window_resize(self):
+        """視窗縮放後 reader 靠距底部中央的偏移仍讀得到，回報的欄位位置也要跟著換算，
+        否則頁面拿舊座標去裁放大圖會是空白。"""
+        session = self.make_session()
+        self.feed(session, "623456[12.34%]")
+        # 同樣距底部中央 (-30, -30) 的位置，只是畫面變小
+        small = make_screen("623956[12.35%]", width=320, height=240, text_x=130, text_y=210)
+        session.feed_frame(rgba_bytes(small), 320, 240)
+        out = json.loads(session.tick())
+        self.assertEqual(out["raw_exp"], "623956[12.35%]")
+        left, top, right, bottom = out["rect"]
+        self.assertTrue(right <= 320 and bottom <= 240, out["rect"])
+        self.assertTrue(120 <= left <= 135, out["rect"])
+
 
 if __name__ == "__main__":
     unittest.main()
