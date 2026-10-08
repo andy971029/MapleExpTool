@@ -215,7 +215,7 @@
     </div>
     <div class="hist-wrap">
       <table class="hist">
-        <thead><tr><th>開始</th><th>角色</th><th>地圖</th><th class="num">等級</th><th class="num">活躍</th><th class="num">累計經驗</th><th class="num">平均 EXP / hr</th><th class="num">升級 / 死亡</th><th></th></tr></thead>
+        <thead><tr><th>最近</th><th>角色</th><th>地圖</th><th class="num">等級</th><th class="num">活躍</th><th class="num">累計經驗</th><th class="num">平均 EXP / hr</th><th class="num">升級 / 死亡</th><th></th></tr></thead>
         <tbody id="hist-body"></tbody>
       </table>
     </div>
@@ -472,47 +472,70 @@ function tick() {
 }
 
 // ---------------------------------------------------------------- 歷史紀錄（localStorage）
-// 一次「統計」存成一筆：從第一筆有效讀數到按重設為止。停止分享再分享會接著算，所以仍是同一筆。
+// 跟桌面版一樣以「角色 × 地圖」為一段：每格把 tracker 累計值的增量記到目前的 (角色, 地圖) 上，
+// 同一組合之後再回來會接著累加，不管中間重整頁面或換去別張圖。地圖用像素指紋（map_id）當 key，
+// 名字只是顯示：OCR 改讀成更準的名字時，key 不會變，數字也不會斷。
 // 只存在這個瀏覽器；清除網站資料或換瀏覽器就看不到。
-const HIST_KEY = "mapleexp.history.v1";
-const HIST_MAX = 200;
+const HIST_KEY = "mapleexp.history.v2";
+const HIST_MAX = 300;
 const AUTOSAVE_MS = 30000;
-let current = null;
+const UNKNOWN_CHAR = "（未辨識角色）";
+const UNKNOWN_MAP = "（未辨識地圖）";
+let segments = loadHistory();      // key -> 段
+let lastTotals = null;             // 上一格的累計值，用來算增量
+let liveKey = "";
+let dirty = false;
 let lastAutosave = 0;
 
 function loadHistory() {
   try {
-    const rows = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
-    return Array.isArray(rows) ? rows : [];
-  } catch { return []; }
+    const rows = JSON.parse(localStorage.getItem(HIST_KEY) || "{}");
+    return rows && typeof rows === "object" && !Array.isArray(rows) ? rows : {};
+  } catch { return {}; }
 }
 
-function writeHistory(rows) {
+function writeHistory() {
+  const rows = Object.entries(segments)
+    .sort((a, b) => (b[1].lastAt || 0) - (a[1].lastAt || 0)).slice(0, HIST_MAX);
   try {
-    localStorage.setItem(HIST_KEY, JSON.stringify(rows.slice(-HIST_MAX)));
+    localStorage.setItem(HIST_KEY, JSON.stringify(Object.fromEntries(rows)));
     return true;
   } catch { return false; }
 }
 
 function trackHistory(out) {
-  if (!out.totals) return;
   const t = out.totals;
-  if (!current) {
-    current = { id: Date.now(), startedAt: Date.now(), maps: [] };
-  }
-  Object.assign(current, {
-    endedAt: Date.now(),
-    character: out.character || current.character || "",
-    job: out.job || current.job || "",
-    level: out.level ?? current.level ?? null,
-    cumNet: Math.round(t.cum_net),
-    activeSec: Math.round(t.active_sec),
-    idleSec: Math.round(t.idle_sec),
-    average: t.average == null ? null : Math.round(t.average),
-    levelups: out.levelups, deaths: out.deaths,
+  if (!t) return;
+  const now = {
+    net: t.cum_net, active: t.active_sec, idle: t.idle_sec,
+    levelups: out.levelups || 0, deaths: out.deaths || 0,
+  };
+  const prev = lastTotals;
+  lastTotals = now;
+  if (!prev) return;
+  // 任何一項變小代表 tracker 被重設，這一格只當新基準，不算增量。
+  const d = {
+    net: now.net - prev.net, active: now.active - prev.active, idle: now.idle - prev.idle,
+    levelups: now.levelups - prev.levelups, deaths: now.deaths - prev.deaths,
+  };
+  if (Object.values(d).some((v) => v < 0)) return;
+
+  const character = out.character || UNKNOWN_CHAR;
+  const mapId = out.map_id || "";
+  const key = `${character}|${mapId}`;
+  liveKey = key;
+  const seg = segments[key] || (segments[key] = {
+    character, job: "", level: null, mapId, mapName: "",
+    firstAt: Date.now(), lastAt: Date.now(),
+    cumNet: 0, activeSec: 0, idleSec: 0, levelups: 0, deaths: 0,
   });
-  if (out.map_name && !current.maps.includes(out.map_name)) current.maps.push(out.map_name);
-  if (Date.now() - lastAutosave > AUTOSAVE_MS) {
+  seg.cumNet += d.net; seg.activeSec += d.active; seg.idleSec += d.idle;
+  seg.levelups += d.levelups; seg.deaths += d.deaths;
+  if (out.job) seg.job = out.job;
+  if (out.level != null) seg.level = out.level;
+  if (out.map_name) seg.mapName = out.map_name;
+  if (d.active > 0 || d.idle > 0) { seg.lastAt = Date.now(); dirty = true; }
+  if (dirty && Date.now() - lastAutosave > AUTOSAVE_MS) {
     saveCurrent();
     renderHistory();
   }
@@ -520,10 +543,13 @@ function trackHistory(out) {
 
 function saveCurrent() {
   lastAutosave = Date.now();
-  if (!current || !current.activeSec) return;   // 還沒累計到任何活躍時間就不留
-  const rows = loadHistory().filter((r) => r.id !== current.id);
-  rows.push(current);
-  if (!writeHistory(rows)) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
+  if (!dirty) return;
+  // 還沒累計到任何時間的空段不留。
+  for (const [key, seg] of Object.entries(segments)) {
+    if (!seg.activeSec && !seg.idleSec) delete segments[key];
+  }
+  if (writeHistory()) dirty = false;
+  else log("存檔失敗：瀏覽器不允許寫入 localStorage。");
 }
 
 function fmtDuration(sec) {
@@ -532,28 +558,30 @@ function fmtDuration(sec) {
 }
 
 function renderHistory() {
-  const rows = loadHistory().reverse();
+  const rows = Object.entries(segments).sort((x, y) => (y[1].lastAt || 0) - (x[1].lastAt || 0));
   const body = $("hist-body");
   body.textContent = "";
   $("hist-note").textContent = rows.length
-    ? `共 ${rows.length} 筆，只存在這個瀏覽器。`
-    : "還沒有紀錄。開始統計後每 30 秒、按重設或停止分享時會自動存。";
-  for (const r of rows) {
+    ? `共 ${rows.length} 段（角色 × 地圖），只存在這個瀏覽器。`
+    : "還沒有紀錄。開始統計後每 30 秒、按停止分享或關閉分頁時會自動存。";
+  const when = (ms) => new Date(ms).toLocaleString("zh-Hant", { hour12: false, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  for (const [key, r] of rows) {
     const tr = document.createElement("tr");
-    if (current && r.id === current.id) tr.className = "live";
+    if (key === liveKey) tr.className = "live";
+    const avg = r.activeSec > 0 ? Math.round(r.cumNet / (r.activeSec / 3600)) : null;
     const cells = [
-      new Date(r.startedAt).toLocaleString("zh-Hant", { hour12: false, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-      [r.character, r.job].filter(Boolean).join(" · ") || "--",
-      (r.maps || []).join("、") || "--",
+      when(r.lastAt),
+      [r.character, r.job].filter(Boolean).join(" · "),
+      r.mapName || (r.mapId ? "" : UNKNOWN_MAP) || "--",
       r.level ?? "--",
-      fmtDuration(r.activeSec || 0),
-      (r.cumNet ?? 0).toLocaleString(),
-      r.average == null ? "--" : r.average.toLocaleString(),
-      `${r.levelups ?? 0} / ${r.deaths ?? 0}`,
+      fmtDuration(Math.round(r.activeSec)),
+      Math.round(r.cumNet).toLocaleString(),
+      avg == null ? "--" : avg.toLocaleString(),
+      `${r.levelups} / ${r.deaths}`,
     ];
     cells.forEach((text, i) => {
       const td = document.createElement("td");
-      td.textContent = text;
+      td.textContent = text || "--";
       if (i >= 3) td.className = "num";
       tr.appendChild(td);
     });
@@ -562,8 +590,9 @@ function renderHistory() {
     btn.className = "secondary";
     btn.textContent = "刪除";
     btn.addEventListener("click", () => {
-      writeHistory(loadHistory().filter((x) => x.id !== r.id));
-      if (current && current.id === r.id) current = null;
+      delete segments[key];
+      dirty = true;
+      saveCurrent();
       renderHistory();
     });
     del.appendChild(btn);
@@ -573,7 +602,7 @@ function renderHistory() {
 }
 
 $("hist-export").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(loadHistory(), null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(Object.values(segments), null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "mapleexp-history.json";
@@ -582,8 +611,9 @@ $("hist-export").addEventListener("click", () => {
 });
 $("hist-clear").addEventListener("click", () => {
   if (!confirm("確定清除所有歷史紀錄？")) return;
-  writeHistory([]);
-  current = null;
+  segments = {};
+  dirty = true;
+  saveCurrent();
   renderHistory();
 });
 window.addEventListener("pagehide", saveCurrent);
@@ -662,7 +692,7 @@ $("share").addEventListener("click", share);
 $("stop").addEventListener("click", stop);
 $("reset").addEventListener("click", () => {
   saveCurrent();
-  current = null;
+  lastTotals = null;
   session.reset();
   renderHistory();
   log("統計已重設。");
