@@ -383,7 +383,9 @@ class WebSession:
             return      # 辨識途中換了解析度，座標已經作廢
         for (left, top, right, bottom), candidates in zip(ctx["bars"], texts):
             for text in candidates:
-                title, _score = panels.match_title((text or "").replace("\n", ""))
+                # Tesseract 的 chi_tra 會在字與字之間補空白、把框線讀成「|」（實測 "| 小 地 圖 |"），
+                # 只留文字本身才配得上。
+                title, _score = panels.match_title("".join(c for c in (text or "") if c.isalnum()))
                 if title == MINIMAP_TITLE:
                     self._minimap_body = (
                         max(0, left - panels.BODY_PAD_LEFT),
