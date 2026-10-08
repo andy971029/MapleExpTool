@@ -79,7 +79,9 @@ class TestWebSession(unittest.TestCase):
         out = self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]", "624456[12.36%]"])
         stats = out["stats"]
         self.assertTrue(stats["recent_valid"])
-        self.assertEqual(stats["recent"], bridge.format_exp(1000))
+        # 第一次增加前的閒置間隔不算活躍時間，所以窗內累計可能少於總累計，但必須與追蹤器一致
+        est = session.tracker.snapshot().rates[bridge.RATE_WINDOW_SEC]
+        self.assertEqual(stats["recent"], bridge.format_exp(est.exp_gained))
         self.assertEqual(stats["total"], bridge.format_exp(1000))
         rate = session.tracker.snapshot().rates[bridge.RATE_WINDOW_SEC].exp_per_hour
         self.assertEqual(stats["per_hour"], bridge.format_rate(rate))
