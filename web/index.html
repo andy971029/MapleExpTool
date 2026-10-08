@@ -60,7 +60,7 @@
   .warn { color: var(--idle); font-size: 13px; margin: 12px 0 0; }
 
   /* ---------- 版面 ---------- */
-  .layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 40px; margin-top: 28px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 40px; margin-top: 24px; }
   @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
   .col { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
   h2 { margin: 0 0 12px; font: 700 12px var(--body); letter-spacing: .14em; color: var(--muted); }
@@ -77,6 +77,18 @@
   .note:empty { display: none; }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
 
+  /* ---------- 角色 / 地圖 ---------- */
+  .ident { display: flex; flex-wrap: wrap; gap: 6px 36px; margin-top: 22px; padding-bottom: 14px;
+    border-bottom: 1px solid var(--line); align-items: baseline; }
+  .ident > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .ident .grow { flex: 1 1 260px; }
+  .ident span { font-size: 12px; color: var(--muted); letter-spacing: .1em; }
+  .ident b { font: 700 20px var(--body); overflow-wrap: anywhere; }
+  /* ---------- 診斷（次要，預設收起） ---------- */
+  .diag-box { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .diag-box summary { cursor: pointer; font: 700 12px var(--body); letter-spacing: .14em; color: var(--muted); }
+  .diag-box[open] summary { margin-bottom: 14px; }
+  .engine { margin-top: 24px; max-width: 560px; }
   /* ---------- 經驗條 ---------- */
   .mapname { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
   .mapname span { font-size: 12px; color: var(--muted); }
@@ -151,50 +163,38 @@
   </header>
   <p id="hint" class="warn" hidden></p>
 
-  <div class="layout">
-    <div class="col">
-      <section>
-        <h2>依最近 10 min 預估</h2>
-        <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / hr</span></div>
-        <dl class="facts">
-          <div><dt>依最近 10 min 預估</dt><dd id="st-half">--</dd></div>
-          <div><dt>整場平均</dt><dd id="st-average">--</dd></div>
-          <div><dt>最近 10 min 累計經驗</dt><dd id="st-recent">--</dd></div>
-          <div><dt>目前總累計經驗</dt><dd id="st-total">--</dd></div>
-          <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
-          <div><dt>還差</dt><dd id="remaining">--</dd></div>
-        </dl>
-        <div class="note" id="st-note"></div>
-      </section>
-
-    </div>
-
-    <div class="col">
-      <section>
-        <h2>目前經驗</h2>
-        <div class="mapname"><span>地圖</span><b id="map-name">--</b></div>
-        <div class="lvl"><span>Lv.</span><b id="level">--</b><span class="pct" id="bar-pct">--</span></div>
-        <div class="bar"><div id="bar-fill"></div></div>
-        <div class="bar-text" id="bar-text">-- / --</div>
-        <dl class="row4">
-          <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
-          <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
-        </dl>
-      </section>
-
-
-      <section>
-        <h2>引擎狀態</h2>
-        <table class="diag">
-          <tr><td>畫面大小</td><td id="frame-size">--</td></tr>
-          <tr><td>取樣</td><td id="stats">--</td></tr>
-          <tr><td>文字辨識引擎</td><td id="ocr-state">尚未載入</td></tr>
-        </table>
-        <div id="log"></div>
-      </section>
-    </div>
+  <div class="ident" aria-label="角色與地圖">
+    <div><span>角色</span><b id="id-char">--</b></div>
+    <div><span>職業</span><b id="id-job">--</b></div>
+    <div class="grow"><span>地圖</span><b id="map-name">--</b></div>
   </div>
 
+  <div class="layout">
+    <section>
+      <h2>收益速率</h2>
+      <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / hr</span></div>
+      <dl class="facts">
+        <div><dt>依最近 10 min 預估</dt><dd id="st-half">--</dd></div>
+        <div><dt>整場平均</dt><dd id="st-average">--</dd></div>
+        <div><dt>最近 10 min 累計經驗</dt><dd id="st-recent">--</dd></div>
+        <div><dt>目前總累計經驗</dt><dd id="st-total">--</dd></div>
+        <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
+        <div><dt>還差</dt><dd id="remaining">--</dd></div>
+      </dl>
+      <div class="note" id="st-note"></div>
+    </section>
+
+    <section>
+      <h2>目前經驗</h2>
+      <div class="lvl"><span>Lv.</span><b id="level">--</b><span class="pct" id="bar-pct">--</span></div>
+      <div class="bar"><div id="bar-fill"></div></div>
+      <div class="bar-text" id="bar-text">-- / --</div>
+      <dl class="row4">
+        <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
+        <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
+      </dl>
+    </section>
+  </div>
   <section id="history" style="margin-top:40px">
     <div class="hist-head">
       <h2>歷史紀錄</h2>
@@ -210,7 +210,9 @@
     </div>
   </section>
 
-  <section id="sources" style="margin-top:40px">
+
+  <details id="diag" class="diag-box">
+    <summary>診斷 · 辨識來源與引擎狀態</summary>
     <h2>辨識來源 · 從畫面哪裡讀到的</h2>
     <div class="tray">
       <div class="specimen" id="sp-exp">
@@ -240,7 +242,16 @@
       </div>
     </div>
     <div class="note">放大是整數倍、不做平滑：你看到的像素就是辨識程式拿到的像素。</div>
-  </section>
+    <div class="engine">
+      <h2>引擎狀態</h2>
+      <table class="diag">
+        <tr><td>畫面大小</td><td id="frame-size">--</td></tr>
+        <tr><td>取樣</td><td id="stats">--</td></tr>
+        <tr><td>文字辨識引擎</td><td id="ocr-state">尚未載入</td></tr>
+      </table>
+      <div id="log"></div>
+    </section>
+  </details>
 
   <video id="video" autoplay muted playsinline></video>
   <canvas id="frame"></canvas>
@@ -598,6 +609,8 @@ function padTime(text) {
 function render(out, elapsedMs) {
   log(out.message);
   $("frame-size").textContent = out.frame_size ? `${out.frame_size[0]} × ${out.frame_size[1]}` : "--";
+  $("id-char").textContent = out.character || "--";
+  $("id-job").textContent = out.job || "--";
   $("level").textContent = out.level == null ? "--" : out.level;
 
   const rois = out.rois || {};
