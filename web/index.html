@@ -829,7 +829,7 @@ function render(out, elapsedMs) {
 
   const st = out.stats;
   $("rate-main").textContent = st.per_hour.replace("/h", "");
-  $("rate-pct").textContent = st.pct.per_hour === "--" ? "" : st.pct.per_hour.replace("/hr", "");
+  $("rate-pct").textContent = st.pct.per_hour === "--" ? "" : "≈ " + st.pct.per_hour.replace("/hr", "");
   const sub = (id, v) => { $(id).textContent = v === "--" ? "" : "≈ " + v.replace("/hr", " / hr"); };
   sub("st-half-p", st.pct.per_half_hour); sub("st-average-p", st.pct.average);
   sub("st-recent-p", st.pct.recent); sub("st-total-p", st.pct.total);
