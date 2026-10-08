@@ -54,7 +54,8 @@
   button .ic { width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; flex: none; }
   button.go { background: var(--ok); border-color: var(--ok); color: var(--on-ok); }
   button.halt { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
-  dialog { background: var(--surface); color: var(--ink); border: 2px solid var(--ink); border-radius: 2px; padding: 22px 24px; max-width: 420px; }
+  dialog { width: min(1100px, 94vw); max-width: none; background: var(--surface); color: var(--ink); border: 2px solid var(--ink); border-radius: 2px; padding: 22px 24px; }
+  dialog .hist-wrap { margin-bottom: 18px; max-height: 50vh; overflow: auto; }
   dialog::backdrop { background: rgba(0, 0, 0, .5); }
   dialog p { margin: 0 0 18px; line-height: 1.6; }
   dialog .btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
@@ -287,11 +288,13 @@
   <canvas id="frame"></canvas>
 </main>
 <dialog id="settle-dlg">
-  <p>是否先結算並儲存本次修練紀錄？</p>
+  <h2>本次修練紀錄</h2>
+  <p>確認要把這次的紀錄存進歷史嗎？</p>
+  <div class="hist-wrap"><table class="hist"><thead><tr id="dlg-head"></tr></thead><tbody id="dlg-body"></tbody></table></div>
   <div class="btns">
-    <button id="dlg-yes" class="go">是，先儲存</button>
-    <button id="dlg-no" class="secondary">否，直接重置</button>
-    <button id="dlg-cancel" class="secondary">取消</button>
+    <button id="dlg-cancel" class="secondary" hidden>取消</button>
+    <button id="dlg-no" class="secondary">不要儲存</button>
+    <button id="dlg-yes" class="go">儲存</button>
   </div>
 </dialog>
 
@@ -489,7 +492,6 @@ async function share() {
 
 function stopAndSettle() {
   if (!stream) return;
-  settle();
   if (timer) clearInterval(timer);
   timer = null;
   stream.getTracks().forEach((t) => t.stop());
@@ -498,7 +500,8 @@ function stopAndSettle() {
   paused = false;
   syncButtons();
   setState("已停止");
-  log("分享已停止並結算。統計保留在畫面上，再分享一次會接著算。");
+  log("分享已停止。統計保留在畫面上，再分享一次會接著算。");
+  openSettle(false, () => {});
 }
 
 function togglePause() {
@@ -513,8 +516,7 @@ function togglePause() {
 }
 
 function doReset() {
-  pending = {};
-  liveKey = "";
+  discardPending();
   lastTotals = null;
   session.reset();
   renderHistory();
@@ -522,8 +524,7 @@ function doReset() {
 }
 
 function askReset() {
-  if (!hasPending()) { doReset(); return; }
-  $("settle-dlg").showModal();
+  openSettle(true, (choice) => { if (choice !== "cancel") doReset(); });
 }
 
 // ---------------------------------------------------------------- 每秒一格
@@ -629,17 +630,24 @@ function trackHistory(out) {
   if (d.active > 0 || d.idle > 0) seg.endAt = at;
 }
 
-// 結算：把暫存的段正式寫入歷史。沒累計到經驗的段直接丟掉。
-function settle() {
-  const done = Object.values(pending).filter((seg) => seg.cumNet > 0);
+function pendingSegments() {
+  return Object.values(pending).filter((seg) => seg.cumNet > 0);
+}
+
+// 結算確認後才呼叫：把暫存的段正式寫入歷史。
+function commitPending() {
+  const done = pendingSegments();
+  discardPending();
+  if (!done.length) return;
+  records.push(...done);
+  if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
+  else log(`已儲存 ${done.length} 段修練紀錄。`);
+  renderHistory();
+}
+
+function discardPending() {
   pending = {};
   liveKey = "";
-  if (done.length) {
-    records.push(...done);
-    if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
-    else log(`已結算 ${done.length} 段修練紀錄。`);
-  }
-  renderHistory();
 }
 
 function fmtDuration(sec) {
@@ -692,9 +700,7 @@ function renderHistory() {
     th.textContent = HIST_COLS[i].label + (on ? (histSort.dir > 0 ? " ▲" : " ▼") : "");
     th.setAttribute("aria-sort", on ? (histSort.dir > 0 ? "ascending" : "descending") : "none");
   });
-  // 進行中的暫存段也列出來（標示「進行中」），但它還沒存，也不能刪。
-  const live = Object.values(pending).filter((seg) => seg.cumNet > 0).map((seg) => ({ seg, live: true }));
-  const rows = [...live, ...records.map((seg) => ({ seg, live: false }))].sort((x, y) => {
+  const rows = records.map((seg) => ({ seg, live: false })).sort((x, y) => {
     const a = col.sort(x.seg), b = col.sort(y.seg);
     if (a == null && b == null) return 0;
     if (a == null) return 1;
@@ -705,8 +711,8 @@ function renderHistory() {
   const body = $("hist-body");
   body.textContent = "";
   $("hist-note").textContent = rows.length
-    ? `已結算 ${records.length} 段${live.length ? `，進行中 ${live.length} 段（尚未儲存）` : ""}；只存在這個瀏覽器。`
-    : "還沒有紀錄。按「停止分享並結算」或重置時選擇儲存，這次修練才會存進來。";
+    ? `共 ${records.length} 段，只存在這個瀏覽器。`
+    : "還沒有紀錄。按「停止分享並結算」或重置，確認儲存後才會出現在這裡。";
   for (const { seg: r, live: isLive } of rows) {
     const tr = document.createElement("tr");
     if (isLive) tr.className = "live";
@@ -736,6 +742,50 @@ function renderHistory() {
 }
 buildHistoryHead();
 
+function fillSettleTable(segs) {
+  const head = $("dlg-head");
+  if (!head.children.length) {
+    HIST_COLS.forEach((c) => {
+      const th = document.createElement("th");
+      th.textContent = c.label;
+      if (c.num) th.className = "num";
+      head.appendChild(th);
+    });
+  }
+  const body = $("dlg-body");
+  body.textContent = "";
+  for (const r of segs) {
+    const tr = document.createElement("tr");
+    HIST_COLS.forEach((c) => {
+      const td = document.createElement("td");
+      td.textContent = c.text(r) || "--";
+      if (c.num) td.className = "num";
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  }
+}
+
+// 結算確認視窗：列出這次的紀錄，由使用者決定存或不存。cancelable 時多一個「取消」（重置用）。
+function openSettle(cancelable, done) {
+  const segs = pendingSegments();
+  if (!segs.length) { discardPending(); done("empty"); return; }
+  fillSettleTable(segs);
+  const dlg = $("settle-dlg");
+  $("dlg-cancel").hidden = !cancelable;
+  const finish = (choice) => {
+    dlg.close();
+    if (choice === "save") commitPending();
+    else if (choice === "discard") discardPending();
+    if (done) done(choice);
+  };
+  $("dlg-yes").onclick = () => finish("save");
+  $("dlg-no").onclick = () => finish("discard");
+  $("dlg-cancel").onclick = () => finish("cancel");
+  dlg.oncancel = (e) => { e.preventDefault(); if (cancelable) finish("cancel"); };
+  dlg.showModal();
+}
+
 $("hist-export").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -761,7 +811,7 @@ window.addEventListener("beforeunload", (e) => {
   e.preventDefault();
   e.returnValue = "";
 });
-window.addEventListener("pagehide", () => { if (hasPending()) settle(); });
+window.addEventListener("pagehide", () => { if (hasPending()) commitPending(); });
 renderHistory();
 
 // 每一塊辨識來源都裁出來放大，格式一致：能看出引擎真正拿到的像素，也能核對讀對沒有。
@@ -843,9 +893,6 @@ function render(out, elapsedMs) {
 $("share").addEventListener("click", () => (stream ? stopAndSettle() : share()));
 $("pause").addEventListener("click", togglePause);
 $("reset").addEventListener("click", askReset);
-$("dlg-yes").addEventListener("click", () => { $("settle-dlg").close(); settle(); doReset(); });
-$("dlg-no").addEventListener("click", () => { $("settle-dlg").close(); doReset(); });
-$("dlg-cancel").addEventListener("click", () => $("settle-dlg").close());
 setBtn("pause", "pause", "暫停");
 setBtn("reset", "replay", "重置");
 boot();
