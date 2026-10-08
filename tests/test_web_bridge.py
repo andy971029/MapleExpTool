@@ -243,6 +243,35 @@ class TestWebSession(unittest.TestCase):
         self.assertTrue(120 <= left <= 135, out["rect"])
 
 
+class TestNumeralBars(unittest.TestCase):
+    def _line(self, bars: int) -> np.ndarray:
+        # 藍底白字：一個漢字的豎筆（距離 3 px）加上間距 4 px 的直槓。
+        image = np.zeros((14, 30, 3), np.uint8)
+        image[...] = (160, 130, 90)
+        image[2:12, 6] = 255
+        for i in range(bars):
+            image[2:11, 9 + 4 * i: 11 + 4 * i] = 255
+        return image
+
+    def test_counts_bars_but_not_the_preceding_stroke(self):
+        for bars in (1, 2, 3):
+            self.assertEqual(bridge.trailing_numeral_bars(self._line(bars), (0, 14)), bars)
+
+    def test_ocr_single_I_is_corrected_to_the_pixel_count(self):
+        from mapleexp.core import mapvocab
+        from mapleexp.gamedata import MapRecord, MapVocabulary
+
+        vocab = MapVocabulary(records=tuple(
+            MapRecord("107000%d00" % i, "戰火之地", "沼澤地" + n)
+            for i, n in enumerate("ⅠⅡⅢ")
+        ))
+        guess = mapvocab.identify("戰火之地沼澤地I", vocab)
+        self.assertEqual(guess.name, "沼澤地Ⅰ")
+        self.assertEqual(bridge._fix_numeral(guess, 3, vocab), "戰火之地 沼澤地Ⅲ")
+        self.assertIsNone(bridge._fix_numeral(guess, 1, vocab))
+        self.assertIsNone(bridge._fix_numeral(guess, 0, vocab))
+
+
 class FakeZone:
     """只帶 bridge 會用到的欄位；真正的字形切割在 test_identity 驗證。"""
 

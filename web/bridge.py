@@ -403,7 +403,10 @@ class WebSession:
             [_png_data_url(ocr.prepare(image[top:bottom], scale=s)) for s in MAP_OCR_SCALES]
             for top, bottom in bands[:2]
         ]
-        self._request_ocr(f"map:{self.map_id}", "text", images, {"map_id": self.map_id})
+        bars = trailing_numeral_bars(image, bands[min(1, len(bands) - 1)])
+        self._request_ocr(
+            f"map:{self.map_id}", "text", images, {"map_id": self.map_id, "bars": bars}
+        )
 
     def _finish_map_name(self, ctx: dict, texts) -> None:
         lines = []
@@ -420,6 +423,9 @@ class WebSession:
             if not guess.full_name or guess.score <= self._map_scores.get(map_id, -1.0):
                 return      # 這次沒有比上次好，保留原本的
             name, score = guess.full_name, guess.score
+            fixed = _fix_numeral(guess, ctx.get("bars", 0), self.map_vocab)
+            if fixed:
+                name, score = fixed, 1.0
         else:
             name, score = " · ".join(lines), 0.0
         self._map_names[map_id] = name
@@ -583,6 +589,62 @@ class WebSession:
             "deaths": snapshot.deaths,
         })
         return json.dumps(data, ensure_ascii=False)
+
+
+def trailing_numeral_bars(image: np.ndarray, band: tuple[int, int]) -> int:
+    """數最後一行右端的羅馬數字有幾根直槓（Ⅰ=1、Ⅱ=2、Ⅲ=3），認不出回傳 0。
+
+    Tesseract 會把「Ⅲ」讀成單一個「I」（實測 戰火之地 沼澤地Ⅲ → 沼澤地I），而「沼澤地Ⅰ」
+    本身就是清單裡的合法地圖，字串比對無從分辨；但直槓在像素上等距（這個字型是 4 px），
+    數得出來。等距這個條件是為了不把前一個漢字的豎筆（距離 3 px）算成多一根。
+    """
+    top, bottom = band
+    luma = ident.to_luma(image)
+    mask = (luma >= max(120, int(luma.mean()) + 20))[top:bottom]
+    if mask.size == 0 or not mask.any():
+        return 0
+    counts = mask.sum(axis=0)
+    tall = counts >= max(3, int(mask.shape[0] * 0.65))
+    last_ink = int(np.flatnonzero(mask.any(axis=0))[-1])
+    # 抓出每一道「又高又細」的直槓，記錄起點；最右邊那道必須貼著最後一個有字的欄。
+    starts: list[int] = []
+    x = last_ink
+    while x >= 0:
+        if tall[x]:
+            end = x
+            while x >= 0 and tall[x]:
+                x -= 1
+            if end - x > 2:
+                break
+            starts.append(x + 1)
+        else:
+            x -= 1
+            if starts and starts[-1] - x > 5:
+                break
+    if not starts or last_ink - starts[0] > 2:
+        return 0
+    bars = 1
+    for newer, older in zip(starts, starts[1:]):
+        if newer - older != 4:
+            break
+        bars += 1
+    return min(bars, 3)
+
+
+def _fix_numeral(guess, bars: int, vocab):
+    """用像素數出的直槓數，在同一個名稱的 Ⅰ/Ⅱ/Ⅲ 之間改選；沒有對應的就不動。"""
+    if not 1 <= bars <= 3:
+        return None
+    name = mapvocab.clean(guess.name)
+    stem = name.rstrip("I")
+    have = len(name) - len(stem)
+    if not 1 <= have <= 3 or have == bars:
+        return None
+    street, target = mapvocab.clean(guess.street), stem + "I" * bars
+    for record in vocab.records:
+        if mapvocab.clean(record.street) == street and mapvocab.clean(record.name) == target:
+            return f"{record.street} {record.name}".strip()
+    return None
 
 
 def _band_rects(name_rect, name_image):
