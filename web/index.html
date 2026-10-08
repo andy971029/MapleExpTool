@@ -74,6 +74,7 @@
   dl.facts > div { border-top: 1px solid var(--line); padding: 10px 0 12px; }
   dt { font-size: 12px; color: var(--muted); }
   dd { margin: 2px 0 0; font: 700 28px var(--display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+  .note:empty { display: none; }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
 
   /* ---------- 經驗條 ---------- */
@@ -145,6 +146,8 @@
           <div><dt>整場平均</dt><dd id="st-average">--</dd></div>
           <div><dt>最近 10 min 累計經驗</dt><dd id="st-recent">--</dd></div>
           <div><dt>目前總累計經驗</dt><dd id="st-total">--</dd></div>
+          <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
+          <div><dt>還差</dt><dd id="remaining">--</dd></div>
         </dl>
         <div class="note" id="st-note"></div>
       </section>
@@ -155,8 +158,6 @@
         <div class="bar"><div id="bar-fill"></div></div>
         <div class="bar-text" id="bar-text">-- / --</div>
         <dl class="row4">
-          <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
-          <div><dt>還差</dt><dd id="remaining">--</dd></div>
           <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
           <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
         </dl>
