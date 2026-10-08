@@ -32,7 +32,7 @@ from mapleexp.core import jobvocab
 from mapleexp.core.stats import format_elapsed, format_exp, format_rate
 from mapleexp.core.tracker import ACTIVE, IDLE, PAUSED, WARMUP, Tracker
 from mapleexp.vision import identity as ident
-from mapleexp.vision import ocr, pngio
+from mapleexp.vision import ocr, panels, pngio
 from mapleexp.core.reading import StatusReading
 from mapleexp.vision.locate import closing_bracket_columns, locate_exp_field
 from mapleexp.vision.reader import StatusReader
@@ -64,6 +64,16 @@ CHARACTER_OCR_SCALES = (3, 4, 6)
 # 等級方塊只有 22x13，要多個倍率互相印證。實測 Tesseract 的英文模型在 3/4/6/8 倍
 # 都讀出 45，沒有分歧；中文模型讀同一塊則 4 個倍率只有 2 個有回答，所以數字走英文模型。
 LEVEL_OCR_SCALES = (3, 4, 6, 8)
+# 小地圖面板要靠標題列「小地圖」三個字認（桌面版 PanelTracker 同一招），OCR 是
+# 非同步的，所以搜尋失敗後隔幾秒再試；搜尋範圍沿用桌面版（畫面左上角的比例）。
+MINIMAP_TITLE = "小地圖"
+MINIMAP_SEARCH_INTERVAL_SEC = 5.0
+MINIMAP_TITLE_SCALES = (3, 4, 5)
+MINIMAP_MAX_BARS = 6
+# 面板還記著、卻連續這麼多格讀不到地圖名區，才當作面板被搬走或收合而重找。
+MAP_LOST_TICKS = 5
+MAP_NAME_RETRY_SEC = 5.0
+MAP_OCR_SCALES = (3, 4, 6)
 # 同一組字形辨識失敗幾次就放棄（字形變了會重新計算）。
 OCR_RETRY_LIMIT = 3
 
@@ -104,6 +114,11 @@ class FrameCapturer:
         self.frame = None
 
 
+EMPTY_ROIS: dict[str, tuple[int, int, int, int] | None] = {
+    "level": None, "job": None, "name": None, "map": None,
+}
+
+
 class WebSession:
     """一場追蹤。JS 每秒呼叫一次 ``tick()``，拿回 JSON 字串畫到頁面上。"""
 
@@ -138,8 +153,18 @@ class WebSession:
         self._ocr_inflight: dict[str, dict] = {}
         self._ocr_ready = False
         # 每一項資料「從畫面哪一塊讀來的」，頁面拿去裁放大圖，讓人肉眼核對辨識有沒有看對。
-        self._rois: dict[str, tuple[int, int, int, int] | None] = {"level": None, "job": None, "name": None}
+        self._rois: dict[str, tuple[int, int, int, int] | None] = dict(EMPTY_ROIS)
         self._rois_size: tuple[int, int] | None = None
+
+        # 地圖：先找到小地圖面板，再從面板內容區定位名稱區；指紋連續穩定才算換圖。
+        self.map_watcher = ident.MapWatcher()
+        self.map_id = ""
+        self.map_name = ""
+        self._map_names: dict[str, str] = {}
+        self._minimap_body: tuple[int, int, int, int] | None = None
+        self._minimap_searched_at = -MINIMAP_SEARCH_INTERVAL_SEC
+        self._map_misses = 0
+        self._map_name_checked_at = -MAP_NAME_RETRY_SEC
 
     # ------------------------------------------------------------------ #
 
@@ -253,13 +278,16 @@ class WebSession:
         rect = self._current_rect()
         if frame is None or rect is None:
             return
-        found = ident.scan(frame, None, exp_rect=rect)
+        found = ident.scan(frame, None, exp_rect=rect, map_rect=self._minimap_body)
         # 版面只有換解析度才會變，所以找到過的位置要記住；某一格沒掃到（色鍵被特效蓋住、
         # 名牌被遮一下）就清掉，頁面會每隔幾秒閃一次「等待定位」。
         size = (int(frame.shape[1]), int(frame.shape[0]))
         if size != self._rois_size:
-            self._rois = {"level": None, "job": None, "name": None}
+            self._rois = dict(EMPTY_ROIS)
             self._rois_size = size
+            self._forget_minimap()
+            self.map_watcher = ident.MapWatcher()
+            self.map_id = self.map_name = ""
         job_rect, name_rect = _band_rects(found.name_rect, found.name_image)
         for key, value in (("level", found.level_rect), ("job", job_rect), ("name", name_rect)):
             if value is not None:
@@ -275,6 +303,104 @@ class WebSession:
 
         if found.name_image is not None and self._ocr_ready:
             self._maybe_request_character(found.name_image)
+
+        self._scan_map(frame, found)
+
+    def _forget_minimap(self) -> None:
+        self._minimap_body = None
+        self._rois["map"] = None
+        self._map_misses = 0
+
+    def _scan_map(self, frame: np.ndarray, found) -> None:
+        if self._minimap_body is None:
+            if self._ocr_ready:
+                self._maybe_search_minimap(frame)
+            return
+        if not found.map_id:
+            # 面板還記著卻讀不到名稱區：連續幾格才算面板不見了（換圖的讀取畫面也會短暫讀不到）。
+            self._map_misses += 1
+            if self._map_misses >= MAP_LOST_TICKS:
+                self._forget_minimap()
+            return
+        self._map_misses = 0
+        self._rois["map"] = found.map_rect
+        if self.map_watcher.feed(found.map_id, found.map_image):
+            self.map_id = self.map_watcher.map_id
+            self.map_name = self._map_names.get(self.map_id, "")
+        if self.map_id and not self.map_name and self._ocr_ready:
+            self._maybe_request_map_name()
+
+    def _maybe_search_minimap(self, frame: np.ndarray) -> None:
+        now = time.monotonic()
+        if now - self._minimap_searched_at < MINIMAP_SEARCH_INTERVAL_SEC:
+            return
+        if any(key.startswith("title:") for key in self._ocr_inflight):
+            return
+        self._minimap_searched_at = now
+        height, width = frame.shape[:2]
+        region = frame[: int(height * ident.MINIMAP_SEARCH_H), : int(width * ident.MINIMAP_SEARCH_W)]
+        bars = [rect for rect, _fill in panels.find_title_bars(region)][:MINIMAP_MAX_BARS]
+        if not bars:
+            return
+        images = []
+        for left, top, right, bottom in bars:
+            crop = frame[max(0, top - 2) : bottom + 2, max(0, left - 2) : right + 2]
+            images.append([_png_data_url(ocr.prepare(crop, scale=s, bright_text=False))
+                           for s in MINIMAP_TITLE_SCALES])
+        self._request_ocr("title:minimap", "text", images,
+                          {"bars": bars, "size": (int(width), int(height))})
+
+    def _finish_minimap_search(self, ctx: dict, texts) -> None:
+        """哪一條標題列讀起來像「小地圖」，它底下就是名稱區所在的內容區。"""
+        frame = self.capturer.frame
+        if not texts or frame is None:
+            return
+        height, width = frame.shape[:2]
+        if ctx["size"] != (int(width), int(height)):
+            return      # 辨識途中換了解析度，座標已經作廢
+        for (left, top, right, bottom), candidates in zip(ctx["bars"], texts):
+            for text in candidates:
+                title, _score = panels.match_title((text or "").replace("\n", ""))
+                if title == MINIMAP_TITLE:
+                    self._minimap_body = (
+                        max(0, left - panels.BODY_PAD_LEFT),
+                        bottom,
+                        min(width, right + panels.BODY_PAD_RIGHT),
+                        min(height, bottom + panels.BODY_HEIGHT),
+                    )
+                    self._map_misses = 0
+                    return
+
+    def _maybe_request_map_name(self) -> None:
+        image = self.map_watcher.image
+        now = time.monotonic()
+        if image is None or now - self._map_name_checked_at < MAP_NAME_RETRY_SEC:
+            return
+        if any(key.startswith("map:") for key in self._ocr_inflight):
+            return
+        bands = ident.text_bands(image)
+        if not bands:
+            return
+        self._map_name_checked_at = now
+        # 名稱區通常是兩行（地區／地圖名），分行辨識跟角色名一樣比較穩。
+        images = [
+            [_png_data_url(ocr.prepare(image[top:bottom], scale=s)) for s in MAP_OCR_SCALES]
+            for top, bottom in bands[:2]
+        ]
+        self._request_ocr(f"map:{self.map_id}", "text", images, {"map_id": self.map_id})
+
+    def _finish_map_name(self, ctx: dict, texts) -> None:
+        lines = []
+        for candidates in texts or []:
+            best = max((ocr.tidy(c).replace("\n", "") for c in candidates), key=len, default="")
+            if best:
+                lines.append(best)
+        if not lines:
+            return
+        name = " · ".join(lines)
+        self._map_names[ctx["map_id"]] = name
+        if ctx["map_id"] == self.map_id:
+            self.map_name = name
 
     def _request_level(self, zone) -> None:
         images = [_png_data_url(ocr.prepare(zone.image, scale=s)) for s in LEVEL_OCR_SCALES]
@@ -314,6 +440,10 @@ class WebSession:
             self._finish_level(ctx["zone"], texts)
         elif rid.startswith("character:"):
             self._finish_character(ctx, texts)
+        elif rid.startswith("title:"):
+            self._finish_minimap_search(ctx, texts)
+        elif rid.startswith("map:"):
+            self._finish_map_name(ctx, texts)
 
     def _finish_level(self, zone, texts) -> None:
         """每個倍率各給一個答案，要全部同意才採用（桌面版 read_level_by_ocr 同一個規則）。"""
@@ -382,6 +512,8 @@ class WebSession:
             "level": self.level,
             "job": self.job,
             "character": self.character,
+            "map_name": self.map_name,
+            "map_id": self.map_id,
             "ocr": self._take_ocr_outbox(),
             "rois": {"exp": list(rect) if rect else None,
                      **{k: list(v) if v else None for k, v in self._rois.items()}},

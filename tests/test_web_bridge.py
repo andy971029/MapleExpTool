@@ -95,7 +95,7 @@ class TestWebSession(unittest.TestCase):
 
     def test_payload_lists_every_read_region(self):
         out = self.feed(self.make_session(), "623456[12.34%]")
-        self.assertEqual(set(out["rois"]), {"exp", "level", "job", "name"})
+        self.assertEqual(set(out["rois"]), {"exp", "level", "job", "name", "map"})
         self.assertEqual(out["rois"]["exp"], out["rect"])
 
     def test_roi_grows_back_after_being_shrunk_by_an_occluder(self):
@@ -136,6 +136,58 @@ class TestWebSession(unittest.TestCase):
         out = json.loads(session.tick())
         self.assertFalse(session.occluded, out["message"])
         self.assertEqual(out["exp_abs"], 623456, out["message"])
+
+    def test_map_name_is_found_via_minimap_title_then_read(self):
+        """小地圖標題列 OCR 成「小地圖」→ 內容區定位 → 指紋穩定換圖 → 名稱 OCR。"""
+        from test_identity import make_panel
+
+        screen = make_screen(clutter=False, extra=None)
+        screen[:80, :150] = make_panel()[:80, :150]
+        screen[4:18, 18:132, :3] = 255                      # 純白標題列
+        h, w = screen.shape[:2]
+        session = self.make_session()
+        session.set_ocr_ready(True)
+
+        def tick() -> dict:
+            session.feed_frame(rgba_bytes(screen), w, h)
+            return json.loads(session.tick())
+
+        out = tick()
+        requests = {req["id"]: req for req in out["ocr"]}
+        self.assertIn("title:minimap", requests)
+        session.ocr_result("title:minimap", json.dumps([["小地", "小地圖"]] * len(requests["title:minimap"]["images"])))
+
+        requests = {}
+        for _ in range(4):                                   # 指紋要連續穩定 3 格才算換圖
+            out = tick()
+            requests.update({req["id"]: req for req in out["ocr"]})
+        self.assertIsNotNone(out["rois"]["map"])
+        self.assertTrue(out["map_id"])
+        self.assertIn(f"map:{out['map_id']}", requests)
+
+        session.ocr_result(f"map:{out['map_id']}", json.dumps([["戰火之地"], ["沼澤地III"]]))
+        self.assertEqual(tick()["map_name"], "戰火之地 · 沼澤地III")
+
+    def test_minimap_is_forgotten_when_zone_disappears(self):
+        from test_identity import make_panel
+
+        screen = make_screen(clutter=False, extra=None)
+        screen[:80, :150] = make_panel()[:80, :150]
+        screen[4:18, 18:132, :3] = 255
+        h, w = screen.shape[:2]
+        session = self.make_session()
+        session.set_ocr_ready(True)
+        session.feed_frame(rgba_bytes(screen), w, h)
+        out = json.loads(session.tick())
+        session.ocr_result("title:minimap", json.dumps([["小地圖"]] * len(out["ocr"][0]["images"])))
+        session.feed_frame(rgba_bytes(screen), w, h)
+        session.tick()
+        self.assertIsNotNone(session._minimap_body)
+        screen[:80, :150, :3] = 30                           # 面板被關掉
+        for _ in range(bridge.MAP_LOST_TICKS):
+            session.feed_frame(rgba_bytes(screen), w, h)
+            session.tick()
+        self.assertIsNone(session._minimap_body)
 
     def test_payload_before_any_frame_is_safe(self):
         session = self.make_session()
