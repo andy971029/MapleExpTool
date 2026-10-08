@@ -13,3 +13,6 @@ assets/icon-*.png
 CLAUDE.md
 CLAUDE.local.md
 .claude/
+
+# web prototype build output
+web/mapleexp.zip

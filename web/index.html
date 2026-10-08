@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MapleExp 網頁版</title>
+<style>
+  :root {
+    --bg: #14172b; --panel: #1d2140; --panel-2: #262b52; --text: #f1f2f8; --muted: #9ea4c8;
+    --ok: #4fd18b; --idle: #f0a941; --bad: #ef5b5b; --accent: #7aa2ff; --bar: #3b56c9;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { background: var(--accent); color: #0b0e1f; border: 0; border-radius: 8px;
+    padding: 10px 18px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  button[disabled] { opacity: .45; cursor: default; }
+  button.secondary { background: var(--panel-2); color: var(--text); }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px;
+    border-radius: 999px; background: var(--panel-2); font-size: 14px; }
+  .pill i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .pill.active i { background: var(--ok); } .pill.idle i { background: var(--idle); }
+  .pill.paused i { background: var(--bad); }
+  .card { background: var(--panel); border-radius: 12px; padding: 16px 18px; margin-top: 16px; }
+  .big { font-size: 40px; font-weight: 700; letter-spacing: .5px; line-height: 1.1; }
+  .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid .v { font-size: 20px; font-weight: 600; }
+  .dim { opacity: .45; }
+  .bar { position: relative; height: 26px; background: var(--panel-2); border-radius: 6px;
+    overflow: hidden; margin-top: 8px; }
+  .bar > div { position: absolute; inset: 0 auto 0 0; background: var(--bar); width: 0; }
+  .bar > span { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 14px; font-weight: 600; }
+  .kv { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; }
+  .kv b { font-weight: 600; }
+  #log { font-family: Consolas, monospace; font-size: 12px; color: var(--muted);
+    white-space: pre-wrap; max-height: 160px; overflow: auto; }
+  canvas#roi { image-rendering: pixelated; background: #000; border-radius: 4px;
+    max-width: 100%; display: block; margin-top: 8px; }
+  video, canvas#frame { display: none; }
+  .warn { color: var(--idle); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MapleExp 網頁版（實驗）</h1>
+  <div class="sub">分享遊戲視窗 → 用桌面版同一套模板比對讀經驗值 → 算 EXP/hr。全部在瀏覽器本機執行，畫面不會離開這台電腦。</div>
+
+  <div class="row">
+    <button id="share" disabled>載入 Python 環境…</button>
+    <button id="reset" class="secondary" disabled>重設統計</button>
+    <button id="stop" class="secondary" disabled>停止分享</button>
+    <span id="state" class="pill"><i></i><span>尚未開始</span></span>
+  </div>
+  <p id="hint" class="warn" hidden></p>
+
+  <div class="card">
+    <div class="label">EXP/hr（5 分鐘窗）</div>
+    <div id="rate-main" class="big">--</div>
+    <div class="grid" style="margin-top:12px" id="rates"></div>
+  </div>
+
+  <div class="card">
+    <div class="label">目前經驗</div>
+    <div class="bar"><div id="bar-fill"></div><span id="bar-text">-- / -- (--%)</span></div>
+    <div class="kv" style="margin-top:10px"><span>升級剩餘時間</span><b id="eta">--</b></div>
+    <div class="kv"><span>還差</span><b id="remaining">--</b></div>
+    <div class="kv"><span>本場累積經驗</span><b id="gross">--</b></div>
+    <div class="kv"><span>活躍 / 閒置</span><b id="times">-- / --</b></div>
+    <div class="kv"><span>升級 / 死亡</span><b id="events">0 / 0</b></div>
+  </div>
+
+  <div class="card">
+    <div class="label">辨識狀態</div>
+    <div class="kv"><span>畫面大小</span><b id="frame-size">--</b></div>
+    <div class="kv"><span>經驗值欄位位置</span><b id="rect">--</b></div>
+    <div class="kv"><span>讀到的字串</span><b id="raw">--</b></div>
+    <div class="kv"><span>取樣 / 失敗 / 每格耗時</span><b id="stats">0 / 0 / --</b></div>
+    <div class="label" style="margin-top:8px">經驗值欄位（放大 4 倍，這就是模板比對看到的像素）</div>
+    <canvas id="roi" width="320" height="60"></canvas>
+    <div class="label" style="margin-top:8px">訊息</div>
+    <div id="log"></div>
+  </div>
+
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="frame"></canvas>
+</main>
+
+<script>
+// Pyodide 版本要跟 scripts/build_web.py 打包的 Python 原始碼相容（3.11+ 都可以）。
+const PYODIDE_BASE = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
+const TICK_MS = 1000;
+
+const $ = (id) => document.getElementById(id);
+const video = $("video");
+const frame = $("frame");
+const frameCtx = frame.getContext("2d", { willReadFrequently: true });
+const roiCtx = $("roi").getContext("2d");
+roiCtx.imageSmoothingEnabled = false;
+
+let pyodide = null;
+let session = null;
+let stream = null;
+let timer = null;
+let lastMessage = "";
+
+function log(text) {
+  if (!text || text === lastMessage) return;
+  lastMessage = text;
+  const stamp = new Date().toLocaleTimeString("zh-Hant", { hour12: false });
+  $("log").textContent = `[${stamp}] ${text}\n` + $("log").textContent;
+}
+
+function setState(text, key) {
+  const pill = $("state");
+  pill.className = "pill " + (key || "");
+  pill.lastElementChild.textContent = text;
+}
+
+// ---------------------------------------------------------------- 載入 Python
+async function boot() {
+  try {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = PYODIDE_BASE + "pyodide.js";
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("載入 pyodide.js 失敗（網路？）"));
+      document.head.appendChild(s);
+    });
+    pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
+    $("share").textContent = "載入 numpy…";
+    await pyodide.loadPackage("numpy");
+
+    $("share").textContent = "載入辨識程式…";
+    const zip = await fetch("mapleexp.zip");
+    if (!zip.ok) throw new Error("找不到 mapleexp.zip，先跑 serve.cmd（它會打包）");
+    pyodide.unpackArchive(await zip.arrayBuffer(), "zip", { extractDir: "/pkg" });
+    pyodide.runPython("import sys; sys.path.insert(0, '/pkg')");
+    const bridge = await (await fetch("bridge.py")).text();
+    pyodide.runPython(bridge);
+    session = pyodide.runPython("WebSession()");
+
+    $("share").textContent = "分享遊戲視窗";
+    $("share").disabled = false;
+    log("Python 環境就緒。按「分享遊戲視窗」，在對話框裡選「視窗」分頁、挑遊戲視窗。");
+  } catch (err) {
+    $("share").textContent = "載入失敗";
+    log(String(err));
+  }
+}
+
+// ---------------------------------------------------------------- 分享視窗
+async function share() {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    log("這個瀏覽器不支援 getDisplayMedia，請用 Chrome 或 Edge。");
+    return;
+  }
+  try {
+    // 解析度要求開到最大：Chrome 對大視窗預設會縮小，縮過的像素模板就比不準。
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 5, max: 10 } },
+      audio: false,
+      preferCurrentTab: false,
+      selfBrowserSurface: "exclude",
+      surfaceSwitching: "include",
+    });
+  } catch (err) {
+    log("沒有取得視窗：" + err.message);
+    return;
+  }
+  const track = stream.getVideoTracks()[0];
+  track.addEventListener("ended", stop);
+  const settings = track.getSettings();
+  if (settings.displaySurface && settings.displaySurface !== "window") {
+    $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
+    $("hint").hidden = false;
+  } else {
+    $("hint").hidden = true;
+  }
+  video.srcObject = stream;
+  await video.play();
+
+  $("share").disabled = true;
+  $("stop").disabled = false;
+  $("reset").disabled = false;
+  setState("尋找經驗值欄位…");
+  timer = setInterval(tick, TICK_MS);
+}
+
+function stop() {
+  if (timer) clearInterval(timer);
+  timer = null;
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = null;
+  video.srcObject = null;
+  $("share").disabled = false;
+  $("stop").disabled = true;
+  setState("已停止");
+  log("分享已停止。統計保留在畫面上，再分享一次會接著算。");
+}
+
+// ---------------------------------------------------------------- 每秒一格
+function tick() {
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) return;
+  const started = performance.now();
+
+  if (frame.width !== w || frame.height !== h) { frame.width = w; frame.height = h; }
+  frameCtx.drawImage(video, 0, 0, w, h);
+  const image = frameCtx.getImageData(0, 0, w, h);
+
+  let out;
+  try {
+    session.feed_frame(image.data, w, h);
+    out = JSON.parse(session.tick());
+  } catch (err) {
+    log("Python 錯誤：" + err.message);
+    return;
+  }
+  render(out, performance.now() - started);
+}
+
+function render(out, elapsedMs) {
+  log(out.message);
+  $("frame-size").textContent = out.frame_size ? `${out.frame_size[0]} × ${out.frame_size[1]}` : "--";
+  $("raw").textContent = out.raw_exp || "--";
+
+  if (out.rect) {
+    const [l, t, r, b] = out.rect;
+    $("rect").textContent = `(${l}, ${t}) – (${r}, ${b})`;
+    const rw = r - l, rh = b - t;
+    $("roi").width = rw * 4; $("roi").height = rh * 4;
+    roiCtx.imageSmoothingEnabled = false;
+    roiCtx.drawImage(frame, l, t, rw, rh, 0, 0, rw * 4, rh * 4);
+  } else {
+    $("rect").textContent = "尚未找到";
+  }
+
+  if (!out.state_key) {
+    setState(out.state, "");
+    return;
+  }
+  setState(out.state, out.state_key);
+
+  $("stats").textContent = `${out.samples} / ${out.misses} / ${elapsedMs.toFixed(0)} ms`;
+  $("events").textContent = `${out.levelups} / ${out.deaths}`;
+  $("gross").textContent = out.gross_text;
+  $("times").textContent = `${out.active_text} / ${out.idle_text}`;
+  $("eta").textContent = out.eta_text + (out.eta_window ? `（${out.eta_window}窗）` : "");
+  $("remaining").textContent = out.remaining == null ? "--" : out.remaining.toLocaleString();
+
+  const pct = out.exp_pct == null ? null : out.exp_pct;
+  $("bar-fill").style.width = pct == null ? "0" : `${Math.min(100, pct)}%`;
+  $("bar-text").textContent = `${out.exp_text} / ${out.need_text} (${pct == null ? "--" : pct.toFixed(2)}%)`;
+
+  const main = out.rates.find((r) => r.window === 300) || out.rates[0];
+  $("rate-main").textContent = main ? main.text : "--";
+  $("rates").innerHTML = out.rates.map((r) =>
+    `<div><div class="label">${r.label}</div><div class="v ${r.valid ? "" : "dim"}">${r.text}</div></div>`
+  ).join("");
+}
+
+$("share").addEventListener("click", share);
+$("stop").addEventListener("click", stop);
+$("reset").addEventListener("click", () => { session.reset(); log("統計已重設。"); });
+boot();
+</script>
+</body>
+</html>
