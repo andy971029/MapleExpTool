@@ -12,5 +12,5 @@ if not exist "%PY%" set "PY=python"
 "%PY%" "%ROOT%\scripts\build_web.py" || exit /b 1
 echo.
 echo Open http://localhost:8765/ in Chrome or Edge. Ctrl+C to stop.
-"%PY%" -m http.server 8765 --bind 127.0.0.1 --directory "%~dp0"
+"%PY%" "%ROOT%\scripts\serve_web.py"
 endlocal
