@@ -138,13 +138,13 @@
   <div class="layout">
     <div class="col">
       <section>
-        <h2>每小時經驗 · 依最近 10 分鐘預估</h2>
+        <h2>依最近 10 分鐘預估</h2>
         <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / 小時</span></div>
         <dl class="facts">
-          <div><dt>依最近 10 分鐘預估，每 30 分鐘</dt><dd id="st-half">--</dd></div>
+          <div><dt>依最近 10 分鐘預估</dt><dd id="st-half">--</dd></div>
           <div><dt>最近 10 分鐘累計經驗</dt><dd id="st-recent">--</dd></div>
           <div><dt>目前總累計經驗</dt><dd id="st-total">--</dd></div>
-          <div><dt>整場平均每小時</dt><dd id="st-average">--</dd></div>
+          <div><dt>整場平均</dt><dd id="st-average">--</dd></div>
         </dl>
         <div class="note" id="st-note"></div>
       </section>
@@ -455,10 +455,10 @@ function render(out, elapsedMs) {
 
   const st = out.stats;
   $("rate-main").textContent = st.per_hour.replace("/h", "");
-  $("st-half").textContent = st.per_half_hour;
+  $("st-half").textContent = st.per_half_hour === "--" ? "--" : st.per_half_hour + " /30分鐘";
   $("st-recent").textContent = st.recent;
   $("st-total").textContent = st.total;
-  $("st-average").textContent = st.average;
+  $("st-average").textContent = st.average.replace("/h", "/小時");
   // 剛開始不足 10 分鐘時，「最近」其實是「開始到現在」，要讓人看得出來。
   $("st-note").textContent = st.recent_valid
     ? `近 10 分鐘窗實際涵蓋 ${st.span_text}，只算活躍時間，閒置不計。`
