@@ -12,7 +12,7 @@
   :root {
     --ground: #e6ece7; --surface: #f4f8f4; --ink: #12262a; --muted: #566c6e; --line: #bccbc5;
     --accent: #b5600a; --on-accent: #fff8ec;
-    --ok: #1b7f57; --idle: #a8740f; --bad: #b83a2e;
+    --on-ok: #fff; --on-bad: #fff; --ok: #1b7f57; --idle: #a8740f; --bad: #b83a2e;
     --scope: #0c1517; --scope-line: #1f3236;
     --display: "Big Shoulders Display", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
     --body: "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
@@ -22,14 +22,14 @@
     :root:not([data-theme="light"]) {
       --ground: #0d1618; --surface: #142124; --ink: #e3efe9; --muted: #86a09f; --line: #26393c;
       --accent: #f3b13d; --on-accent: #1a1204;
-      --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
+      --on-ok: #06210f; --on-bad: #2a0805; --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
       --scope: #091012; --scope-line: #1b2d31;
     }
   }
   :root[data-theme="dark"] {
     --ground: #0d1618; --surface: #142124; --ink: #e3efe9; --muted: #86a09f; --line: #26393c;
     --accent: #f3b13d; --on-accent: #1a1204;
-    --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
+    --on-ok: #06210f; --on-bad: #2a0805; --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
     --scope: #091012; --scope-line: #1b2d31;
   }
 
@@ -51,6 +51,13 @@
     color: var(--on-accent); padding: 9px 18px; border-radius: 2px; cursor: pointer; }
   button.secondary { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
   button.secondary:hover:not([disabled]) { border-color: var(--ink); }
+  button .ic { width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; flex: none; }
+  button.go { background: var(--ok); border-color: var(--ok); color: var(--on-ok); }
+  button.halt { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+  dialog { background: var(--surface); color: var(--ink); border: 2px solid var(--ink); border-radius: 2px; padding: 22px 24px; max-width: 420px; }
+  dialog::backdrop { background: rgba(0, 0, 0, .5); }
+  dialog p { margin: 0 0 18px; line-height: 1.6; }
+  dialog .btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   button[disabled] { opacity: .4; cursor: default; }
   .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono);
     padding: 7px 12px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
@@ -175,9 +182,9 @@
   <header>
     <div class="mark">服刑日誌<small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
-      <button id="share" disabled>載入 Python 環境…</button>
-      <button id="reset" class="secondary" disabled>重設統計</button>
-      <button id="stop" class="secondary" disabled>停止分享</button>
+      <button id="share" class="go" disabled>載入 Python 環境…</button>
+      <button id="pause" class="secondary" disabled></button>
+      <button id="reset" class="secondary" disabled></button>
       <span id="state" class="pill"><i></i><span>尚未開始</span></span>
     </div>
   </header>
@@ -279,6 +286,14 @@
   <video id="video" autoplay muted playsinline></video>
   <canvas id="frame"></canvas>
 </main>
+<dialog id="settle-dlg">
+  <p>是否先結算並儲存本次修練紀錄？</p>
+  <div class="btns">
+    <button id="dlg-yes" class="go">是，先儲存</button>
+    <button id="dlg-no" class="secondary">否，直接重置</button>
+    <button id="dlg-cancel" class="secondary">取消</button>
+  </div>
+</dialog>
 
 <script>
 // Pyodide 版本要跟 scripts/build_web.py 打包的 Python 原始碼相容（3.11+ 都可以）。
@@ -346,8 +361,8 @@ async function boot() {
       log("地圖清單載入失敗，地圖名稱會用原始辨識結果：" + err.message);
     }
 
-    $("share").textContent = "分享遊戲視窗";
     $("share").disabled = false;
+    syncButtons();
     log("Python 環境就緒。按「分享遊戲視窗」，在對話框裡選「視窗」分頁、挑遊戲視窗。");
   } catch (err) {
     $("share").textContent = "載入失敗";
@@ -410,6 +425,30 @@ function runOcr(req) {
 }
 
 // ---------------------------------------------------------------- 分享視窗
+const ICONS = {
+  play: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M4 2v12l10-6z"/></svg>',
+  stop: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" fill="currentColor"/></svg>',
+  pause: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" fill="currentColor"/><rect x="9.5" y="2" width="3.5" height="12" fill="currentColor"/></svg>',
+  replay: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.6-3.7"/><path fill="currentColor" d="M2 1.5v4.5h4.5z"/></svg>',
+};
+function setBtn(id, icon, text) {
+  $(id).innerHTML = ICONS[icon] + "<span></span>";
+  $(id).lastElementChild.textContent = text;
+}
+let paused = false;
+function syncButtons() {
+  const sharing = !!stream;
+  const share = $("share");
+  share.classList.toggle("go", !sharing);
+  share.classList.toggle("halt", sharing);
+  if (sharing) setBtn("share", "stop", "停止分享並結算");
+  else setBtn("share", "play", "分享遊戲視窗");
+  setBtn("pause", paused ? "play" : "pause", paused ? "繼續" : "暫停");
+  setBtn("reset", "replay", "重置");
+  $("pause").disabled = !sharing;
+  $("reset").disabled = !sharing;
+}
+
 async function share() {
   if (!navigator.mediaDevices?.getDisplayMedia) {
     log("這個瀏覽器不支援 getDisplayMedia，請用 Chrome 或 Edge。");
@@ -429,7 +468,7 @@ async function share() {
     return;
   }
   const track = stream.getVideoTracks()[0];
-  track.addEventListener("ended", stop);
+  track.addEventListener("ended", stopAndSettle);
   const settings = track.getSettings();
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
@@ -440,29 +479,56 @@ async function share() {
   video.srcObject = stream;
   await video.play();
 
-  $("share").disabled = true;
-  $("stop").disabled = false;
-  $("reset").disabled = false;
+  paused = false;
+  session.resume();
+  syncButtons();
   setState("尋找經驗值欄位…");
   timer = setInterval(tick, TICK_MS);
   loadOcr();
 }
 
-function stop() {
-  saveCurrent();
+function stopAndSettle() {
+  if (!stream) return;
+  settle();
   if (timer) clearInterval(timer);
   timer = null;
-  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream.getTracks().forEach((t) => t.stop());
   stream = null;
   video.srcObject = null;
-  $("share").disabled = false;
-  $("stop").disabled = true;
+  paused = false;
+  syncButtons();
   setState("已停止");
-  log("分享已停止。統計保留在畫面上，再分享一次會接著算。");
+  log("分享已停止並結算。統計保留在畫面上，再分享一次會接著算。");
+}
+
+function togglePause() {
+  if (!stream) return;
+  paused = !paused;
+  // 暫停時整個 tick 都不跑：經驗值、活躍、閒置都不累計；恢復時 tracker 只重設基準，
+  // 暫停期間賺的經驗不算進去。
+  if (!paused) session.resume();
+  setState(paused ? "已暫停" : "尋找經驗值欄位…", paused ? "paused" : "");
+  syncButtons();
+  log(paused ? "已暫停計算。" : "繼續計算。");
+}
+
+function doReset() {
+  pending = {};
+  liveKey = "";
+  lastTotals = null;
+  session.reset();
+  renderHistory();
+  log("已重置，統計歸零。");
+}
+
+function askReset() {
+  if (!hasPending()) { doReset(); return; }
+  $("settle-dlg").showModal();
 }
 
 // ---------------------------------------------------------------- 每秒一格
 function tick() {
+  if (paused) return;
   const w = video.videoWidth, h = video.videoHeight;
   if (!w || !h) return;
   const started = performance.now();
@@ -489,31 +555,46 @@ function tick() {
 // 同一組合之後再回來會接著累加，不管中間重整頁面或換去別張圖。地圖用像素指紋（map_id）當 key，
 // 名字只是顯示：OCR 改讀成更準的名字時，key 不會變，數字也不會斷。
 // 只存在這個瀏覽器；清除網站資料或換瀏覽器就看不到。
-const HIST_KEY = "mapleexp.history.v2";
+const HIST_KEY = "mapleexp.history.v3";
+const HIST_KEY_V2 = "mapleexp.history.v2";
 const HIST_MAX = 300;
-const AUTOSAVE_MS = 30000;
 const UNKNOWN_CHAR = "（未辨識角色）";
 const UNKNOWN_MAP = "（未辨識地圖）";
-let segments = loadHistory();      // key -> 段
+// 暫存的「這一次修練」：key = 角色 × 職業 × 等級 × 地圖。只有結算時才寫進 records（localStorage）。
+let pending = {};
+let records = loadRecords();
 let lastTotals = null;             // 上一格的累計值，用來算增量
 let liveKey = "";
-let dirty = false;
-let lastAutosave = 0;
+let seq = 0;
 
-function loadHistory() {
+function loadRecords() {
   try {
-    const rows = JSON.parse(localStorage.getItem(HIST_KEY) || "{}");
-    return rows && typeof rows === "object" && !Array.isArray(rows) ? rows : {};
-  } catch { return {}; }
+    const v3 = JSON.parse(localStorage.getItem(HIST_KEY) || "null");
+    if (Array.isArray(v3)) return v3;
+    // 舊版（v2）每個「角色×地圖」只有首次與最近時間，搬過來時直接當起訖。
+    const v2 = JSON.parse(localStorage.getItem(HIST_KEY_V2) || "null");
+    if (v2 && typeof v2 === "object") {
+      return Object.values(v2).filter((r) => r.cumNet > 0).map((r, i) => ({
+        id: `v2-${i}-${r.firstAt}`, character: r.character, job: r.job || "", level: r.level ?? null,
+        mapId: r.mapId, mapName: r.mapName || "", startAt: r.firstAt, endAt: r.lastAt,
+        cumNet: r.cumNet, activeSec: r.activeSec, idleSec: r.idleSec, levelups: r.levelups, deaths: r.deaths,
+      }));
+    }
+  } catch { /* 壞掉的存檔當作沒有 */ }
+  return [];
 }
 
-function writeHistory() {
-  const rows = Object.entries(segments).filter(([, seg]) => seg.cumNet > 0)
-    .sort((a, b) => (b[1].lastAt || 0) - (a[1].lastAt || 0)).slice(0, HIST_MAX);
+function writeRecords() {
+  records.sort((a, b) => b.endAt - a.endAt);
+  records.length = Math.min(records.length, HIST_MAX);
   try {
-    localStorage.setItem(HIST_KEY, JSON.stringify(Object.fromEntries(rows)));
+    localStorage.setItem(HIST_KEY, JSON.stringify(records));
     return true;
   } catch { return false; }
+}
+
+function hasPending() {
+  return Object.values(pending).some((seg) => seg.cumNet > 0);
 }
 
 function trackHistory(out) {
@@ -534,32 +615,34 @@ function trackHistory(out) {
   if (Object.values(d).some((v) => v < 0)) return;
 
   const character = out.character || UNKNOWN_CHAR;
+  const job = out.job || "";
+  const level = out.level ?? null;
   const mapId = out.map_id || "";
-  const key = `${character}|${mapId}`;
+  const key = [character, job, level ?? "", mapId].join("|");
   liveKey = key;
-  const seg = segments[key] || (segments[key] = {
-    character, job: "", level: null, mapId, mapName: "",
-    firstAt: Date.now(), lastAt: Date.now(),
+  const at = Date.now();
+  const seg = pending[key] || (pending[key] = {
+    id: `${at}-${seq++}`, character, job, level, mapId, mapName: "",
+    startAt: at, endAt: at,
     cumNet: 0, activeSec: 0, idleSec: 0, levelups: 0, deaths: 0,
   });
   seg.cumNet += d.net; seg.activeSec += d.active; seg.idleSec += d.idle;
   seg.levelups += d.levelups; seg.deaths += d.deaths;
-  if (out.job) seg.job = out.job;
-  if (out.level != null) seg.level = out.level;
   if (out.map_name) seg.mapName = out.map_name;
-  if (d.active > 0 || d.idle > 0) seg.lastAt = Date.now();
-  if (d.net > 0) dirty = true;      // 沒累計到經驗就不觸發存檔
-  if (dirty && Date.now() - lastAutosave > AUTOSAVE_MS) {
-    saveCurrent();
-    renderHistory();
-  }
+  if (d.active > 0 || d.idle > 0) seg.endAt = at;
 }
 
-function saveCurrent() {
-  lastAutosave = Date.now();
-  if (!dirty) return;
-  if (writeHistory()) dirty = false;
-  else log("存檔失敗：瀏覽器不允許寫入 localStorage。");
+// 結算：把暫存的段正式寫入歷史。沒累計到經驗的段直接丟掉。
+function settle() {
+  const done = Object.values(pending).filter((seg) => seg.cumNet > 0);
+  pending = {};
+  liveKey = "";
+  if (done.length) {
+    records.push(...done);
+    if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
+    else log(`已結算 ${done.length} 段修練紀錄。`);
+  }
+  renderHistory();
 }
 
 function fmtDuration(sec) {
@@ -575,18 +658,19 @@ function fmtDate(ms) {
 const avgRate = (r) => (r.activeSec > 0 ? Math.round(r.cumNet / (r.activeSec / 3600)) : null);
 // sort 回傳排序用的值（數字或字串），text 回傳顯示文字；null 一律排最後。
 const HIST_COLS = [
-  { label: "日期", sort: (r) => r.lastAt || 0, text: (r) => fmtDate(r.lastAt) },
+  { label: "開始時間", sort: (r) => r.startAt || 0, text: (r) => fmtDate(r.startAt) },
+  { label: "結束時間", sort: (r) => r.endAt || 0, text: (r) => fmtDate(r.endAt) },
   { label: "角色", sort: (r) => r.character, text: (r) => r.character },
   { label: "職業", sort: (r) => r.job || null, text: (r) => r.job },
-  { label: "地圖", sort: (r) => r.mapName || null, text: (r) => r.mapName || (r.mapId ? "" : UNKNOWN_MAP) },
   { label: "等級", num: true, sort: (r) => r.level, text: (r) => r.level },
+  { label: "地圖", sort: (r) => r.mapName || null, text: (r) => r.mapName || (r.mapId ? "" : UNKNOWN_MAP) },
   { label: "活躍", num: true, sort: (r) => r.activeSec, text: (r) => fmtDuration(Math.round(r.activeSec)) },
   { label: "累計經驗", num: true, sort: (r) => r.cumNet, text: (r) => Math.round(r.cumNet).toLocaleString() },
   { label: "平均 EXP / hr", num: true, sort: avgRate, text: (r) => (avgRate(r) ?? "").toLocaleString() },
   { label: "升級", num: true, sort: (r) => r.levelups, text: (r) => r.levelups },
   { label: "死亡", num: true, sort: (r) => r.deaths, text: (r) => r.deaths },
 ];
-let histSort = { col: 0, dir: -1 };
+let histSort = { col: 1, dir: -1 };
 
 function buildHistoryHead() {
   const tr = $("hist-head-row");
@@ -596,7 +680,7 @@ function buildHistoryHead() {
     th.classList.add("sortable");
     th.tabIndex = 0;
     th.addEventListener("click", () => {
-      histSort = { col: i, dir: histSort.col === i ? -histSort.dir : (c.num || i === 0 ? -1 : 1) };
+      histSort = { col: i, dir: histSort.col === i ? -histSort.dir : (c.num || i <= 1 ? -1 : 1) };
       renderHistory();
     });
     th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); th.click(); } });
@@ -613,8 +697,10 @@ function renderHistory() {
     th.textContent = HIST_COLS[i].label + (on ? (histSort.dir > 0 ? " ▲" : " ▼") : "");
     th.setAttribute("aria-sort", on ? (histSort.dir > 0 ? "ascending" : "descending") : "none");
   });
-  const rows = Object.entries(segments).filter(([, seg]) => seg.cumNet > 0).sort((x, y) => {
-    const a = col.sort(x[1]), b = col.sort(y[1]);
+  // 進行中的暫存段也列出來（標示「進行中」），但它還沒存，也不能刪。
+  const live = Object.values(pending).filter((seg) => seg.cumNet > 0).map((seg) => ({ seg, live: true }));
+  const rows = [...live, ...records.map((seg) => ({ seg, live: false }))].sort((x, y) => {
+    const a = col.sort(x.seg), b = col.sort(y.seg);
     if (a == null && b == null) return 0;
     if (a == null) return 1;
     if (b == null) return -1;
@@ -624,36 +710,39 @@ function renderHistory() {
   const body = $("hist-body");
   body.textContent = "";
   $("hist-note").textContent = rows.length
-    ? `共 ${rows.length} 段（角色 × 地圖），只存在這個瀏覽器。`
-    : "還沒有紀錄。開始統計後每 30 秒、按停止分享或關閉分頁時會自動存。";
-  for (const [key, r] of rows) {
+    ? `已結算 ${records.length} 段${live.length ? `，進行中 ${live.length} 段（尚未儲存）` : ""}；只存在這個瀏覽器。`
+    : "還沒有紀錄。按「停止分享並結算」或重置時選擇儲存，這次修練才會存進來。";
+  for (const { seg: r, live: isLive } of rows) {
     const tr = document.createElement("tr");
-    if (key === liveKey) tr.className = "live";
+    if (isLive) tr.className = "live";
     HIST_COLS.forEach((c) => {
       const td = document.createElement("td");
       td.textContent = c.text(r) || "--";
       if (c.num) td.className = "num";
       tr.appendChild(td);
     });
-    const del = document.createElement("td");
-    const btn = document.createElement("button");
-    btn.className = "secondary";
-    btn.textContent = "刪除";
-    btn.addEventListener("click", () => {
-      delete segments[key];
-      dirty = true;
-      saveCurrent();
-      renderHistory();
-    });
-    del.appendChild(btn);
-    tr.appendChild(del);
+    const act = document.createElement("td");
+    if (isLive) {
+      act.textContent = "進行中";
+    } else {
+      const btn = document.createElement("button");
+      btn.className = "secondary";
+      btn.textContent = "刪除";
+      btn.addEventListener("click", () => {
+        records = records.filter((x) => x.id !== r.id);
+        writeRecords();
+        renderHistory();
+      });
+      act.appendChild(btn);
+    }
+    tr.appendChild(act);
     body.appendChild(tr);
   }
 }
 buildHistoryHead();
 
 $("hist-export").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(Object.values(segments), null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "mapleexp-history.json";
@@ -664,13 +753,20 @@ $("boost").addEventListener("change", () => {
   if (session) session.set_boost($("boost").checked ? 1.5 : 1);
 });
 $("hist-clear").addEventListener("click", () => {
-  if (!confirm("確定清除所有歷史紀錄？")) return;
-  segments = {};
-  dirty = true;
-  saveCurrent();
+  if (!confirm("確定清除所有已結算的歷史紀錄？")) return;
+  records = [];
+  writeRecords();
   renderHistory();
 });
-window.addEventListener("pagehide", saveCurrent);
+
+// 關閉分頁／瀏覽器：瀏覽器不允許自訂這個警告的內容，只能擋一下；
+// 使用者選擇離開時，pagehide 會自動結算，等同於選「是」，資料不會丟。
+window.addEventListener("beforeunload", (e) => {
+  if (!hasPending()) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+window.addEventListener("pagehide", () => { if (hasPending()) settle(); });
 renderHistory();
 
 // 每一塊辨識來源都裁出來放大，格式一致：能看出引擎真正拿到的像素，也能核對讀對沒有。
@@ -750,15 +846,14 @@ function render(out, elapsedMs) {
   $("st-note").textContent = st.recent_valid ? "" : "資料還不夠，需要至少兩筆經驗增加。";
 }
 
-$("share").addEventListener("click", share);
-$("stop").addEventListener("click", stop);
-$("reset").addEventListener("click", () => {
-  saveCurrent();
-  lastTotals = null;
-  session.reset();
-  renderHistory();
-  log("統計已重設。");
-});
+$("share").addEventListener("click", () => (stream ? stopAndSettle() : share()));
+$("pause").addEventListener("click", togglePause);
+$("reset").addEventListener("click", askReset);
+$("dlg-yes").addEventListener("click", () => { $("settle-dlg").close(); settle(); doReset(); });
+$("dlg-no").addEventListener("click", () => { $("settle-dlg").close(); doReset(); });
+$("dlg-cancel").addEventListener("click", () => $("settle-dlg").close());
+setBtn("pause", "pause", "暫停");
+setBtn("reset", "replay", "重置");
 boot();
 </script>
 </body>

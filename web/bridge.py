@@ -197,6 +197,10 @@ class WebSession:
         )
         return len(self.map_vocab)
 
+    def resume(self) -> None:
+        """暫停／重新分享後呼叫：下一筆讀數只當新基準，空窗期間的經驗與時間都不算。"""
+        self.tracker.mark_discontinuity()
+
     def reset(self) -> None:
         """重新計算，但 ROI 留著（視窗沒動就不用重找）。"""
         self.tracker.reset()
