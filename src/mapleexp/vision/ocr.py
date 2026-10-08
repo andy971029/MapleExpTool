@@ -202,7 +202,7 @@ def coverage(
 
 
 def prepare(bgra: np.ndarray, scale: int = 4, bright_text: bool = True,
-            margin: int = 28) -> np.ndarray:
+            margin: int = 28, contrast: bool = False) -> np.ndarray:
     """把遊戲畫面的一塊整理成 OCR 比較讀得動的樣子（黑字白底、放大、留白）。
 
     *bright_text* 說的是文字跟陰影哪個是亮的：狀態列與小地圖是白字黑陰影，
@@ -210,6 +210,10 @@ def prepare(bgra: np.ndarray, scale: int = 4, bright_text: bool = True,
     """
     text, shadow = (WHITE, BLACK) if bright_text else (BLACK, WHITE)
     alpha = coverage(bgra, text=text, shadow=shadow)
+    if contrast:
+        # 經過串流壓縮的畫面，字形邊緣與底色邊框會變成中間灰階；放大後一團灰，Tesseract 什麼都
+        # 不回答（實測瀏覽器擷取的等級方塊 45：原樣 4 個倍率全空，拉開對比後 4 個倍率全讀成 45）。
+        alpha = np.clip((alpha - 0.3) / 0.35, 0.0, 1.0)
     # 先解混合再放大：解混合要用原始像素的顏色關係，插值過的顏色不在調色盤上。
     big = bilinear(alpha, max(1, scale))
     scaled = np.clip((1.0 - big) * 255.0, 0, 255).astype(np.uint8)

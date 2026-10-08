@@ -251,5 +251,18 @@ class TestBilinear(unittest.TestCase):
         self.assertTrue(np.allclose(bilinear(source, 1), source))
 
 
+class TestContrast(unittest.TestCase):
+    def test_contrast_pushes_blurry_edges_to_black_or_white(self):
+        # 底色橘、字白、中間一列是壓縮糊掉的半白：沒拉對比會留灰階，拉了就只剩黑白。
+        image = np.zeros((6, 6, 4), np.uint8)
+        image[...] = (30, 140, 240, 255)
+        image[2, 1:5] = (140, 190, 245, 255)
+        image[3, 1:5] = (255, 255, 255, 255)
+        plain = prepare(image, scale=1, contrast=False)
+        sharp = prepare(image, scale=1, contrast=True)
+        grey = lambda a: int(((a > 20) & (a < 235)).sum())
+        self.assertLess(grey(sharp), grey(plain))
+
+
 if __name__ == "__main__":
     unittest.main()

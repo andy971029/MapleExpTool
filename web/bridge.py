@@ -434,7 +434,7 @@ class WebSession:
             self.map_name = name
 
     def _request_level(self, zone) -> None:
-        images = [_png_data_url(ocr.prepare(zone.image, scale=s)) for s in LEVEL_OCR_SCALES]
+        images = [_png_data_url(ocr.prepare(zone.image, scale=s, contrast=True)) for s in LEVEL_OCR_SCALES]
         self._request_ocr(f"level:{zone.shape_key}", "digits", images, {"zone": zone})
 
     def _maybe_request_character(self, image: np.ndarray) -> None:
