@@ -33,7 +33,8 @@ from mapleexp.core.stats import format_elapsed, format_exp, format_rate
 from mapleexp.core.tracker import ACTIVE, IDLE, PAUSED, WARMUP, Tracker
 from mapleexp.vision import identity as ident
 from mapleexp.vision import ocr, pngio
-from mapleexp.vision.locate import locate_exp_field
+from mapleexp.core.reading import StatusReading
+from mapleexp.vision.locate import closing_bracket_columns, locate_exp_field
 from mapleexp.vision.reader import StatusReader
 from mapleexp.vision.templates import TemplateSet
 from mapleexp.win32.capture import CaptureError, Frame
@@ -106,7 +107,11 @@ class FrameCapturer:
 class WebSession:
     """一場追蹤。JS 每秒呼叫一次 ``tick()``，拿回 JSON 字串畫到頁面上。"""
 
-    def __init__(self, templates: TemplateSet | None = None) -> None:
+    def __init__(self, templates: TemplateSet | None = None, require_bracket: bool = True) -> None:
+        # 綠色的 ``]`` 看不到就代表欄位被擋住，這一格不計。合成畫面沒有綠色括號，
+        # 單元測試用 False 跳過；真的遊戲畫面一律要開。
+        self.require_bracket = require_bracket
+        self.occluded = False
         # 不讀磁碟上的設定檔：瀏覽器裡沒有 %LOCALAPPDATA%，而且 ROI 每次分享視窗
         # 都重新找，便宜（不到 0.2 秒）又不會沿用到錯的。
         self.cfg = Config()
@@ -161,6 +166,7 @@ class WebSession:
             self.message = str(exc)
             return self._payload(None)
 
+        reading = self._reject_if_occluded(reading)
         self.tracker.feed(reading)
         snapshot = self.tracker.snapshot()
         if reading.ok:
@@ -171,7 +177,8 @@ class WebSession:
             self.message = reading.reason
             # 連續讀不到可能是視窗被縮放、ROI 偏了。跟桌面版 auto_configure 一樣：
             # 先試讀舊 ROI，讀不到才重新定位，定位也失敗就沿用舊的等它回來。
-            if snapshot.consecutive_misses >= RELOCATE_AFTER_MISSES:
+            # 被擋住時重新定位只會抓到殘缺的一截，等它露出來比較好。
+            if snapshot.consecutive_misses >= RELOCATE_AFTER_MISSES and not self.occluded:
                 now = time.monotonic()
                 if now - self._relocated_at >= RELOCATE_INTERVAL_SEC:
                     self._relocated_at = now
@@ -191,6 +198,22 @@ class WebSession:
             self.rect = auto.located.rect
         if auto.ok and self.reader is None:
             self.reader = StatusReader(self.capturer, self.cfg.reader, self.templates)
+
+    def _reject_if_occluded(self, reading: StatusReading) -> StatusReading:
+        """欄位右端的綠色 ``]`` 不見了：資料不齊全，寧可這格不算，也不要把讀到一半的數字記進去。"""
+        self.occluded = False
+        rect = self._current_rect()
+        frame = self.capturer.frame
+        if not self.require_bracket or not reading.ok or rect is None or frame is None:
+            return reading
+        if closing_bracket_columns(frame, rect):
+            return reading
+        self.occluded = True
+        return StatusReading.failed(
+            reading.mono, reading.wall,
+            reason="經驗值欄位被擋住（看不到綠色的 ]），資料不完整，暫停計算",
+            raw_exp=reading.raw_exp,
+        )
 
     def _maybe_widen_roi(self) -> None:
         """欄位被滑鼠或特效遮住時重新定位，只會找到露出來的那一截，ROI 就此變窄、

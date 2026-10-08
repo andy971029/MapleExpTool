@@ -35,7 +35,7 @@ class TestWebSession(unittest.TestCase):
         cls.templates = testfont.build_template_set()
 
     def make_session(self) -> bridge.WebSession:
-        return bridge.WebSession(templates=self.templates)
+        return bridge.WebSession(templates=self.templates, require_bracket=False)
 
     def feed_over_time(self, session: bridge.WebSession, texts: list[str]) -> dict:
         """速率要有時間差才算得出來；合成畫面瞬間餵完，所以讓時鐘每格走 1 秒。"""
@@ -64,7 +64,7 @@ class TestWebSession(unittest.TestCase):
         out = self.feed(session, "623456[12.34%]")
         self.assertTrue(out["located"], out["message"])
         self.assertEqual(out["raw_exp"], "623456[12.34%]")
-        self.assertEqual(out["exp_abs"], 623456)
+        self.assertEqual(out["exp_abs"], 623456, out["message"])
         self.assertIsNotNone(out["rect"])
         self.assertEqual(out["frame_size"], [make_screen("1").shape[1], make_screen("1").shape[0]])
 
@@ -118,6 +118,25 @@ class TestWebSession(unittest.TestCase):
         self.feed(session, "623456[12.34%]")
         self.assertEqual(session.cfg.reader.exp_roi, before)
 
+    def test_missing_closing_bracket_pauses_counting(self):
+        """綠色的 ] 看不到＝欄位被擋住、資料不齊全，這格不能記進統計。"""
+        session = bridge.WebSession(templates=self.templates)      # 預設要求括號
+        screen = make_screen("623456[12.34%]")
+        h, w = screen.shape[:2]
+        session.feed_frame(rgba_bytes(screen), w, h)
+        out = json.loads(session.tick())
+        self.assertTrue(session.occluded)
+        self.assertEqual(out["misses"], 1)
+        self.assertIn("]", out["message"])
+
+        left, top, right, bottom = session.rect
+        tail = screen[top:bottom, right - 6 : right, :3]
+        tail[tail.max(axis=2) > 200] = (60, 220, 90)       # 把 ] 本身染綠（BGR），不破壞字形
+        session.feed_frame(rgba_bytes(screen), w, h)
+        out = json.loads(session.tick())
+        self.assertFalse(session.occluded, out["message"])
+        self.assertEqual(out["exp_abs"], 623456, out["message"])
+
     def test_payload_before_any_frame_is_safe(self):
         session = self.make_session()
         out = json.loads(session.tick())
@@ -131,7 +150,7 @@ class TestWebSession(unittest.TestCase):
         session.reset()
         out = self.feed(session, "623456[12.34%]")
         self.assertEqual(session.rect, rect)
-        self.assertEqual(out["exp_abs"], 623456)
+        self.assertEqual(out["exp_abs"], 623456, out["message"])
 
     def test_rect_follows_window_resize(self):
         """視窗縮放後 reader 靠距底部中央的偏移仍讀得到，回報的欄位位置也要跟著換算，
@@ -163,7 +182,7 @@ class TestIdentityOcr(unittest.TestCase):
         cls.templates = testfont.build_template_set()
 
     def make_session(self) -> bridge.WebSession:
-        session = bridge.WebSession(templates=self.templates)
+        session = bridge.WebSession(templates=self.templates, require_bracket=False)
         self.taught: list[int] = []
         session.level_reader.teach = lambda zone, level: self.taught.append(level) or 0
         return session

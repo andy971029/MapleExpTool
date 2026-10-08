@@ -55,6 +55,27 @@ CANDIDATE_THRESHOLDS = (126, 110, 150, 170, 190)
 PADDING_X = 2
 PADDING_Y = 1
 
+# 「EXP」字樣的點陣（亮度門檻 126 二值化後的樣子，取自 1366x768 的實際畫面）。
+# 它固定在欄位最左邊、不管經驗值幾位數都在同一個位置，所以拿它當左邊界，ROI 就不會
+# 因為數字被滑鼠或特效遮住而被縮窄（只靠「%」往左吃數字時，被遮住的部分會吃不到）。
+EXP_LABEL = (
+    "#########..###.#####.",
+    "######.##..##..######",
+    "##......####...##..##",
+    "##......####...##..##",
+    "#####....##....######",
+    "#####...####...#####.",
+    "##......####...##....",
+    "######.##..##..##....",
+    "#########..###.##....",
+)
+EXP_LABEL_MIN_IOU = 0.72
+EXP_LABEL_REACH = 90
+# 收尾的 ``]`` 與 ``[`` 是亮綠色（描邊是深色），拿顏色比字形可靠：不用模板、
+# 也不怕數字被遮。至少要有這麼多個綠色像素疊在同一欄，才算括號的那一豎。
+BRACKET_MIN_COLUMN_PIXELS = 4
+BRACKET_REACH = 8
+
 
 @dataclass
 class LocateResult:
@@ -114,13 +135,92 @@ def locate_exp_field(
                 if found is None:
                     continue
                 if found.confident:
-                    return found
+                    return refine_with_label(client_bgra, found, templates, anchor)
                 if fallback is None:
                     fallback = found
     return fallback
 
 
-def _find_anchors(mask: np.ndarray, template: np.ndarray) -> list[tuple[int, int]]:
+def closing_bracket_columns(client_bgra: np.ndarray, rect: tuple[int, int, int, int]) -> list[int]:
+    """欄位右緣附近、屬於綠色 ``]`` 的畫面 x 座標；空串列代表看不到它。
+
+    ``]`` 是欄位裡最後一個字元，它被擋住就表示後面的資料可能不完整（連帶百分比也
+    可能讀成別的數字），呼叫端可以拿來判斷這一格該不該信。
+    """
+    left, top, right, bottom = rect
+    height, width = client_bgra.shape[:2]
+    x0 = max(0, right - BRACKET_REACH)
+    x1 = min(width, right + BRACKET_REACH)
+    rows = client_bgra[max(0, top - 1) : min(height, bottom + 1), x0:x1].astype(np.int16)
+    if rows.size == 0:
+        return []
+    blue, green, red = rows[..., 0], rows[..., 1], rows[..., 2]
+    is_green = (green - red >= 40) & (green - blue >= 40)
+    return [x0 + int(i) for i in np.nonzero(is_green.sum(axis=0) >= BRACKET_MIN_COLUMN_PIXELS)[0]]
+
+
+def _label_mask() -> np.ndarray:
+    return np.array([[c == "#" for c in row] for row in EXP_LABEL], dtype=bool)
+
+
+def refine_with_label(
+    client_bgra: np.ndarray,
+    found: LocateResult,
+    templates: TemplateSet,
+    anchor: str = DEFAULT_ANCHOR,
+) -> LocateResult:
+    """用「EXP」字樣當左邊界、綠色的 ``]`` 當右邊界，重新框一次 ROI。
+
+    只靠 ``%`` 往兩邊吃字元時，被遮住的那段吃不到，ROI 就縮窄；兩個端點都是固定的
+    視覺元素，框出來的範圍跟數字幾位數、有沒有被遮住都無關。任何一個端點找不到
+    （例如 EXP 字樣被遮住、或這個版面沒有綠色括號）就原封不動回傳，行為只會更好不會更差。
+    """
+    left, top, right, bottom = found.rect
+    height, width = client_bgra.shape[:2]
+
+    # 右邊界：綠色括號。只在 ``%`` 右邊一點點的範圍找，才不會抓到別的綠色東西（血條等）。
+    columns = closing_bracket_columns(client_bgra, found.rect)
+    if not columns:
+        return found
+    new_right = min(width, max(columns) + 1 + PADDING_X)
+
+    # 左邊界：EXP 字樣。
+    label = _label_mask()
+    lh, lw = label.shape
+    sx0 = max(0, left - EXP_LABEL_REACH)
+    sx1 = min(width, left + 4 + lw)
+    sy0 = max(0, top - 4)
+    sy1 = min(height, bottom + 4)
+    band = client_bgra[sy0:sy1, sx0:sx1]
+    if band.shape[0] < lh or band.shape[1] < lw:
+        return found
+    mask = binarize(band, threshold=found.threshold, invert=found.invert)
+    hits = _find_anchors(mask, label, min_iou=EXP_LABEL_MIN_IOU)
+    if not hits:
+        return found
+    hit_y, hit_x = hits[0]
+    label_right = sx0 + hit_x + lw
+    if label_right > left + 2:
+        return found        # 字樣跑到數字裡面去了，不是我們要的那個
+
+    new_left = label_right + 1
+    rect = (new_left, top, new_right, bottom)
+    if rect[2] - rect[0] < found.rect[2] - found.rect[0]:
+        return found
+    return LocateResult(
+        roi=Roi.from_pixels(rect, width, height, anchor=anchor),
+        threshold=found.threshold,
+        invert=found.invert,
+        text=found.text,
+        exp_abs=found.exp_abs,
+        exp_pct=found.exp_pct,
+        rect=rect,
+    )
+
+
+def _find_anchors(
+    mask: np.ndarray, template: np.ndarray, min_iou: float = ANCHOR_MIN_IOU
+) -> list[tuple[int, int]]:
     """在遮罩中找出與 template 相似的位置，由相似度高到低。
 
     用 IoU 而不是單純的相同像素數：後者會讓「一整塊實心區域」拿到高分。
@@ -155,7 +255,7 @@ def _find_anchors(mask: np.ndarray, template: np.ndarray) -> list[tuple[int, int
     with np.errstate(divide="ignore", invalid="ignore"):
         iou = np.where(union > 0, intersection / np.maximum(union, 1), 0.0)
 
-    ys, xs = np.nonzero(iou >= ANCHOR_MIN_IOU)
+    ys, xs = np.nonzero(iou >= min_iou)
     if ys.size == 0:
         return []
     scores = iou[ys, xs]

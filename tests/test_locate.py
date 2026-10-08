@@ -137,5 +137,50 @@ class TestLocate(unittest.TestCase):
         self.assertEqual(found.exp_abs, 123456)
 
 
+class TestLabelRefine(unittest.TestCase):
+    """用 EXP 字樣與綠色 ] 框 ROI：數字被遮住時範圍也不會縮。"""
+
+    def setUp(self):
+        self.templates = testfont.build_template_set()
+
+    def paint(self, screen, rect):
+        from mapleexp.vision.locate import EXP_LABEL
+        left, top, right, bottom = rect
+        label_x, label_y = left - 30, top + 1
+        for dy, row in enumerate(EXP_LABEL):
+            for dx, c in enumerate(row):
+                if c == "#":
+                    screen[label_y + dy, label_x + dx, :3] = 250
+        screen[top - 1 : bottom + 1, right - 4 : right - 2, :3] = (60, 220, 90)
+        return label_x + len(EXP_LABEL[0])
+
+    def test_rect_starts_after_label_and_ends_at_bracket(self):
+        base = make_screen(clutter=False, extra=None)
+        rect = locate_exp_field(base, self.templates).rect
+        screen = base.copy()
+        label_right = self.paint(screen, rect)
+        found = locate_exp_field(screen, self.templates)
+        self.assertEqual(found.rect[0], label_right + 1)
+        self.assertGreaterEqual(found.rect[2], rect[2] - 2)
+
+    def test_without_label_or_bracket_nothing_changes(self):
+        base = make_screen(clutter=False, extra=None)
+        rect = locate_exp_field(base, self.templates).rect
+        screen = base.copy()
+        tail = screen[rect[1] : rect[3], rect[2] - 6 : rect[2], :3]
+        tail[tail.max(axis=2) > 200] = (60, 220, 90)       # 只有綠括號、沒有 EXP 字樣
+        got = locate_exp_field(screen, self.templates).rect
+        self.assertEqual((got[0], got[2]), (rect[0], rect[2]))
+
+    def test_covered_digits_do_not_shrink_the_rect(self):
+        base = make_screen(clutter=False, extra=None)
+        rect = locate_exp_field(base, self.templates).rect
+        screen = base.copy()
+        self.paint(screen, rect)
+        full = locate_exp_field(screen, self.templates).rect
+        screen[rect[1] : rect[3], rect[0] : rect[0] + 12, :3] = 90     # 滑鼠遮住開頭幾位
+        self.assertEqual(locate_exp_field(screen, self.templates).rect, full)
+
+
 if __name__ == "__main__":
     unittest.main()
