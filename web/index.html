@@ -424,6 +424,11 @@ function drawSpecimen(key, rect, value) {
   ctx.drawImage(frame, l, t, rw, rh, 0, 0, rw * scale, rh * scale);
 }
 
+// 時間數值固定兩位數（03m56s），數字跳動時寬度不會抖。只改網頁顯示，桌面版格式不動。
+function padTime(text) {
+  return String(text).replace(/(\d+)([hms])/g, (_, n, unit) => n.padStart(2, "0") + unit);
+}
+
 function render(out, elapsedMs) {
   log(out.message);
   $("frame-size").textContent = out.frame_size ? `${out.frame_size[0]} × ${out.frame_size[1]}` : "--";
@@ -443,8 +448,8 @@ function render(out, elapsedMs) {
 
   $("stats").textContent = `${out.samples} 筆 · 失敗 ${out.misses} · ${elapsedMs.toFixed(0)} ms/格`;
   $("events").textContent = `${out.levelups} / ${out.deaths}`;
-  $("times").textContent = `${out.active_text} / ${out.idle_text}`;
-  $("eta").textContent = out.eta_text;
+  $("times").textContent = `${padTime(out.active_text)} / ${padTime(out.idle_text)}`;
+  $("eta").textContent = padTime(out.eta_text);
   $("remaining").textContent = out.remaining == null ? "--" : out.remaining.toLocaleString();
 
   const pct = out.exp_pct == null ? null : out.exp_pct;
