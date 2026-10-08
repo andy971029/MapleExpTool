@@ -136,11 +136,11 @@ async function boot() {
     await pyodide.loadPackage("numpy");
 
     $("share").textContent = "載入辨識程式…";
-    const zip = await fetch("mapleexp.zip");
+    const zip = await fetch("mapleexp.zip", { cache: "no-store" });
     if (!zip.ok) throw new Error("找不到 mapleexp.zip，先跑 serve.cmd（它會打包）");
     pyodide.unpackArchive(await zip.arrayBuffer(), "zip", { extractDir: "/pkg" });
     pyodide.runPython("import sys; sys.path.insert(0, '/pkg')");
-    const bridge = await (await fetch("bridge.py")).text();
+    const bridge = await (await fetch("bridge.py", { cache: "no-store" })).text();
     pyodide.runPython(bridge);
     session = pyodide.runPython("WebSession()");
 
