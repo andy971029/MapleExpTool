@@ -471,7 +471,7 @@ async function share() {
     return;
   }
   const track = stream.getVideoTracks()[0];
-  track.addEventListener("ended", stopAndSettle);
+  track.addEventListener("ended", () => stopAndSettle(true));
   const settings = track.getSettings();
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
@@ -490,8 +490,7 @@ async function share() {
   loadOcr();
 }
 
-function stopAndSettle() {
-  if (!stream) return;
+function haltStream() {
   if (timer) clearInterval(timer);
   timer = null;
   stream.getTracks().forEach((t) => t.stop());
@@ -500,8 +499,23 @@ function stopAndSettle() {
   paused = false;
   syncButtons();
   setState("已停止");
-  log("分享已停止。統計保留在畫面上，再分享一次會接著算。");
-  openSettle(false, () => {});
+}
+
+// 結算後不管存不存都整個重置（暫存與統計歸零）。按鈕觸發的可以取消，取消就繼續分享；
+// 瀏覽器自己結束分享時串流已經沒了，只能直接結算。
+function stopAndSettle(streamEnded = false) {
+  if (!stream) return;
+  if (streamEnded === true) {
+    haltStream();
+    openSettle(false, () => { doReset(); log("分享已結束並結算。"); });
+    return;
+  }
+  openSettle(true, (choice) => {
+    if (choice === "cancel") return;
+    haltStream();
+    doReset();
+    log("分享已停止並結算。");
+  });
 }
 
 function togglePause() {
@@ -890,7 +904,7 @@ function render(out, elapsedMs) {
   $("st-note").textContent = st.recent_valid ? "" : "資料還不夠，需要至少兩筆經驗增加。";
 }
 
-$("share").addEventListener("click", () => (stream ? stopAndSettle() : share()));
+$("share").addEventListener("click", () => (stream ? stopAndSettle(false) : share()));
 $("pause").addEventListener("click", togglePause);
 $("reset").addEventListener("click", askReset);
 setBtn("pause", "pause", "暫停");
