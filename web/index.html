@@ -97,6 +97,8 @@
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
     padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
   .sec-head h2 { margin: 0; padding: 0; border: 0; }
+  .rate-pct { font-size: 20px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .pct-sub { margin-left: 8px; font-size: 12px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
   .boost { font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
   .boost:has(input:checked) { color: var(--accent); font-weight: 700; }
   .layout > section > h2, #history h2 { padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
@@ -193,12 +195,12 @@
         <h2>收益速率</h2>
         <label class="boost" title="試算經驗加倍券：速率、累計經驗與升級倒數都以 1.5 倍顯示，不影響歷史紀錄"><input type="checkbox" id="boost"> 經驗值 1.5 倍</label>
       </div>
-      <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / hr</span></div>
+      <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / hr</span><span class="rate-pct" id="rate-pct"></span></div>
       <dl class="facts">
-        <div><dt>依最近 10 min 預估</dt><dd id="st-half">--</dd></div>
-        <div><dt>整場平均</dt><dd id="st-average">--</dd></div>
-        <div><dt>最近 10 min 累計經驗</dt><dd id="st-recent">--</dd></div>
-        <div><dt>目前總累計經驗</dt><dd id="st-total">--</dd></div>
+        <div><dt>依最近 10 min 預估</dt><dd><span id="st-half">--</span><small class="pct-sub" id="st-half-p"></small></dd></div>
+        <div><dt>整場平均</dt><dd><span id="st-average">--</span><small class="pct-sub" id="st-average-p"></small></dd></div>
+        <div><dt>最近 10 min 累計經驗</dt><dd><span id="st-recent">--</span><small class="pct-sub" id="st-recent-p"></small></dd></div>
+        <div><dt>目前總累計經驗</dt><dd><span id="st-total">--</span><small class="pct-sub" id="st-total-p"></small></dd></div>
         <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
         <div><dt>還差</dt><dd id="remaining">--</dd></div>
       </dl>
@@ -737,6 +739,10 @@ function render(out, elapsedMs) {
 
   const st = out.stats;
   $("rate-main").textContent = st.per_hour.replace("/h", "");
+  $("rate-pct").textContent = st.pct.per_hour === "--" ? "" : "≈ " + st.pct.per_hour.replace("/hr", " / hr");
+  const sub = (id, v) => { $(id).textContent = v === "--" ? "" : "≈ " + v.replace("/hr", " / hr"); };
+  sub("st-half-p", st.pct.per_half_hour); sub("st-average-p", st.pct.average);
+  sub("st-recent-p", st.pct.recent); sub("st-total-p", st.pct.total);
   $("st-half").textContent = st.per_half_hour === "--" ? "--" : st.per_half_hour + " /30 min";
   $("st-recent").textContent = st.recent;
   $("st-total").textContent = st.total;

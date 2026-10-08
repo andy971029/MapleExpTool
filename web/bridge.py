@@ -603,6 +603,14 @@ class WebSession:
             "total": format_exp(snapshot.cum_net * k),
             "average": format_rate(scaled(average)),
             "recent": format_exp(scaled(recent.exp_gained) if recent and recent.valid else None),
+            # 換算成「目前等級所需經驗」的百分比，比純數字直觀；需要經驗量未知時為 "--"。
+            "pct": {
+                "per_hour": _pct_of(scaled(per_hour), snapshot.need, "/hr"),
+                "per_half_hour": _pct_of(per_hour * k / 2 if per_hour is not None else None, snapshot.need),
+                "average": _pct_of(scaled(average), snapshot.need, "/hr"),
+                "recent": _pct_of(scaled(recent.exp_gained) if recent and recent.valid else None, snapshot.need),
+                "total": _pct_of(snapshot.cum_net * k, snapshot.need),
+            },
             "recent_valid": bool(recent and recent.valid),
             "window_text": _window_label(RATE_WINDOW_SEC),
             "span_text": format_elapsed(recent.span_sec) if recent and recent.valid else "--",
@@ -712,6 +720,12 @@ def _window_label(seconds: int) -> str:
     if seconds >= 3600:
         return f"{seconds // 3600} hr"
     return f"{seconds // 60} min"
+
+
+def _pct_of(value: float | None, need: int | None, suffix: str = "") -> str:
+    if value is None or not need:
+        return "--"
+    return f"{value / need * 100:.2f}%{suffix}"
 
 
 def _format_eta(seconds: float | None) -> str:
