@@ -445,8 +445,8 @@ def _band_rects(name_rect, name_image):
 
 def _window_label(seconds: int) -> str:
     if seconds >= 3600:
-        return f"{seconds // 3600} 小時"
-    return f"{seconds // 60} 分鐘"
+        return f"{seconds // 3600} hr"
+    return f"{seconds // 60} min"
 
 
 def _format_eta(seconds: float | None) -> str:
