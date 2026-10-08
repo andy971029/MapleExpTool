@@ -582,6 +582,13 @@ class WebSession:
             "eta_text": _format_eta(snapshot.eta_sec),
             "eta_window": _window_label(snapshot.eta_window) if snapshot.eta_sec else "",
             "stats": stats,
+            # 存檔用的原始數字；畫面上的字串格式化過，不能拿來存。
+            "totals": {
+                "cum_net": snapshot.cum_net,
+                "active_sec": snapshot.active_sec,
+                "idle_sec": snapshot.idle_sec,
+                "average": average,
+            },
             "samples": snapshot.samples,
             "misses": snapshot.misses,
             "consecutive_misses": snapshot.consecutive_misses,
