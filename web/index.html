@@ -532,7 +532,7 @@ function togglePause() {
 // 重置後若沒在分享就不會有下一格 render 來洗掉舊數字，所以這裡直接清畫面。
 function clearStats() {
   for (const id of ["rate-main", "st-half", "st-average", "st-recent", "st-total", "eta", "remaining", "bar-pct"]) $(id).textContent = "--";
-  for (const id of ["rate-pct", "st-half-p", "st-average-p", "st-recent-p", "st-total-p", "eta-window", "st-note"]) $(id).textContent = "";
+  for (const id of ["rate-pct", "st-half-p", "st-average-p", "st-recent-p", "st-total-p", "st-note"]) $(id).textContent = "";
   $("bar-fill").style.width = "0";
   $("bar-text").textContent = "-- / --";
   $("times").textContent = "-- / --";
