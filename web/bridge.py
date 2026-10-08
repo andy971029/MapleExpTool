@@ -201,6 +201,20 @@ class WebSession:
         """暫停／重新分享後呼叫：下一筆讀數只當新基準，空窗期間的經驗與時間都不算。"""
         self.tracker.mark_discontinuity()
 
+    def reset_identity(self) -> None:
+        """結算後連角色／職業／等級／地圖一起清掉，下一格重新辨識（版面位置仍沿用）。"""
+        self.level = None
+        self.job = ""
+        self.character = ""
+        self._character_key = ""
+        self._character_checked_at = 0.0
+        self._level_misses.clear()
+        self.level_status = ""
+        self._forget_minimap()
+        self.map_watcher = ident.MapWatcher()
+        self.map_id = self.map_name = ""
+        self._map_scores.clear()
+
     def reset(self) -> None:
         """重新計算，但 ROI 留著（視窗沒動就不用重找）。"""
         self.tracker.reset()

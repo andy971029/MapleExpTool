@@ -536,12 +536,14 @@ function clearStats() {
   $("bar-fill").style.width = "0";
   $("bar-text").textContent = "-- / --";
   $("times").textContent = "-- / --";
+  for (const id of ["id-char", "id-job", "map-name", "level"]) $(id).textContent = "--";
 }
 
 function doReset() {
   discardPending();
   lastTotals = null;
   session.reset();
+  session.reset_identity();
   clearStats();
   renderHistory();
   log("已重置，統計歸零。");
