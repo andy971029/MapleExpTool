@@ -97,7 +97,7 @@
   dl.row4 dd { font-size: 24px; white-space: nowrap; }
 
   /* ---------- 辨識來源 ---------- */
-  .tray { display: flex; flex-direction: column; gap: 14px; }
+  .tray { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; align-items: start; }
   .specimen { background: var(--surface); border: 1px solid var(--line); border-left: 4px dashed var(--line);
     padding: 12px 14px 14px; }
   .specimen.found { border-left: 4px solid var(--accent); }
@@ -167,6 +167,9 @@
         <div class="note" id="st-note"></div>
       </section>
 
+    </div>
+
+    <div class="col">
       <section>
         <h2>目前經驗</h2>
         <div class="mapname"><span>地圖</span><b id="map-name">--</b></div>
@@ -178,40 +181,7 @@
           <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
         </dl>
       </section>
-    </div>
 
-    <div class="col">
-      <section>
-        <h2>辨識來源 · 從畫面哪裡讀到的</h2>
-        <div class="tray">
-          <div class="specimen" id="sp-exp">
-            <div class="sp-head"><span class="sp-name">經驗值欄位</span><span class="sp-rect" id="sp-exp-r">尚未找到</span></div>
-            <div class="scope"><canvas id="sp-exp-c"></canvas><span class="empty">等待定位…</span></div>
-            <div class="sp-value" id="sp-exp-v">--</div>
-          </div>
-          <div class="specimen" id="sp-level">
-            <div class="sp-head"><span class="sp-name">等級</span><span class="sp-rect" id="sp-level-r">尚未找到</span></div>
-            <div class="scope"><canvas id="sp-level-c"></canvas><span class="empty">等待定位…</span></div>
-            <div class="sp-value" id="sp-level-v">--</div>
-          </div>
-          <div class="specimen" id="sp-job">
-            <div class="sp-head"><span class="sp-name">職業</span><span class="sp-rect" id="sp-job-r">尚未找到</span></div>
-            <div class="scope"><canvas id="sp-job-c"></canvas><span class="empty">等待定位…</span></div>
-            <div class="sp-value" id="sp-job-v">--</div>
-          </div>
-          <div class="specimen" id="sp-name">
-            <div class="sp-head"><span class="sp-name">角色名</span><span class="sp-rect" id="sp-name-r">尚未找到</span></div>
-            <div class="scope"><canvas id="sp-name-c"></canvas><span class="empty">等待定位…</span></div>
-            <div class="sp-value" id="sp-name-v">--</div>
-          </div>
-          <div class="specimen" id="sp-map">
-            <div class="sp-head"><span class="sp-name">地圖名稱</span><span class="sp-rect" id="sp-map-r">尚未找到</span></div>
-            <div class="scope"><canvas id="sp-map-c"></canvas><span class="empty">等待定位…（需展開小地圖，並等文字辨識就緒）</span></div>
-            <div class="sp-value" id="sp-map-v">--</div>
-          </div>
-        </div>
-        <div class="note">放大是整數倍、不做平滑：你看到的像素就是辨識程式拿到的像素。</div>
-      </section>
 
       <section>
         <h2>引擎狀態</h2>
@@ -238,6 +208,38 @@
         <tbody id="hist-body"></tbody>
       </table>
     </div>
+  </section>
+
+  <section id="sources" style="margin-top:40px">
+    <h2>辨識來源 · 從畫面哪裡讀到的</h2>
+    <div class="tray">
+      <div class="specimen" id="sp-exp">
+        <div class="sp-head"><span class="sp-name">經驗值欄位</span><span class="sp-rect" id="sp-exp-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-exp-c"></canvas><span class="empty">等待定位…</span></div>
+        <div class="sp-value" id="sp-exp-v">--</div>
+      </div>
+      <div class="specimen" id="sp-level">
+        <div class="sp-head"><span class="sp-name">等級</span><span class="sp-rect" id="sp-level-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-level-c"></canvas><span class="empty">等待定位…</span></div>
+        <div class="sp-value" id="sp-level-v">--</div>
+      </div>
+      <div class="specimen" id="sp-job">
+        <div class="sp-head"><span class="sp-name">職業</span><span class="sp-rect" id="sp-job-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-job-c"></canvas><span class="empty">等待定位…</span></div>
+        <div class="sp-value" id="sp-job-v">--</div>
+      </div>
+      <div class="specimen" id="sp-name">
+        <div class="sp-head"><span class="sp-name">角色名</span><span class="sp-rect" id="sp-name-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-name-c"></canvas><span class="empty">等待定位…</span></div>
+        <div class="sp-value" id="sp-name-v">--</div>
+      </div>
+      <div class="specimen" id="sp-map">
+        <div class="sp-head"><span class="sp-name">地圖名稱</span><span class="sp-rect" id="sp-map-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-map-c"></canvas><span class="empty">等待定位…（需展開小地圖，並等文字辨識就緒）</span></div>
+        <div class="sp-value" id="sp-map-v">--</div>
+      </div>
+    </div>
+    <div class="note">放大是整數倍、不做平滑：你看到的像素就是辨識程式拿到的像素。</div>
   </section>
 
   <video id="video" autoplay muted playsinline></video>
