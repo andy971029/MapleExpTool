@@ -88,9 +88,9 @@
   .bar::after { content: ""; position: absolute; inset: 0; opacity: .7;
     background: repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), var(--ground) calc(10% - 1px), var(--ground) 10%); }
   .bar-text { font: 400 12px var(--mono); color: var(--muted); margin-top: 6px; }
-  dl.row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0 20px; margin: 18px 0 0; }
+  dl.row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0 20px; margin: 18px 0 0; }
   dl.row4 > div { border-top: 1px solid var(--line); padding: 8px 0 4px; }
-  dl.row4 dd { font-size: 24px; }
+  dl.row4 dd { font-size: 24px; white-space: nowrap; }
 
   /* ---------- 辨識來源 ---------- */
   .tray { display: flex; flex-direction: column; gap: 14px; }
