@@ -459,10 +459,7 @@ function render(out, elapsedMs) {
   $("st-recent").textContent = st.recent;
   $("st-total").textContent = st.total;
   $("st-average").textContent = st.average.replace("/h", "/hr");
-  // 剛開始不足 10 分鐘時，「最近」其實是「開始到現在」，要讓人看得出來。
-  $("st-note").textContent = st.recent_valid
-    ? `近 10 min 窗實際涵蓋 ${st.span_text}，只算活躍時間，閒置不計。`
-    : "資料還不夠，需要至少兩筆經驗增加。";
+  $("st-note").textContent = st.recent_valid ? "" : "資料還不夠，需要至少兩筆經驗增加。";
 }
 
 $("share").addEventListener("click", share);
