@@ -155,7 +155,9 @@ def closing_bracket_columns(client_bgra: np.ndarray, rect: tuple[int, int, int, 
     if rows.size == 0:
         return []
     blue, green, red = rows[..., 0], rows[..., 1], rows[..., 2]
-    is_green = (green - red >= 40) & (green - blue >= 40)
+    # 螢幕分享的畫面經過視訊壓縮，綠色會變淡（實測 G−R 只剩約 50 甚至更低，原圖 G−B 有 150），
+    # 所以紅色差距放寬、藍色差距守住；灰白文字三色幾乎相等，不會誤判。
+    is_green = (green - red >= 25) & (green - blue >= 40)
     return [x0 + int(i) for i in np.nonzero(is_green.sum(axis=0) >= BRACKET_MIN_COLUMN_PIXELS)[0]]
 
 
