@@ -252,16 +252,17 @@ class TestBilinear(unittest.TestCase):
 
 
 class TestContrast(unittest.TestCase):
-    def test_contrast_pushes_blurry_edges_to_black_or_white(self):
-        # 底色橘、字白、中間一列是壓縮糊掉的半白：沒拉對比會留灰階，拉了就只剩黑白。
+    def test_contrast_drops_faint_blur_and_keeps_solid_strokes(self):
+        # 底色橘、字白、中間一列是壓縮糊進來的淡淡一抹：沒拉對比會留灰階，拉了就當背景。
         image = np.zeros((6, 6, 4), np.uint8)
         image[...] = (30, 140, 240, 255)
-        image[2, 1:5] = (140, 190, 245, 255)
+        image[2, 1:5] = (86, 169, 244, 255)
         image[3, 1:5] = (255, 255, 255, 255)
         plain = prepare(image, scale=1, contrast=False)
         sharp = prepare(image, scale=1, contrast=True)
-        grey = lambda a: int(((a > 20) & (a < 235)).sum())
-        self.assertLess(grey(sharp), grey(plain))
+        self.assertLess(int(plain[MARGIN + 2, MARGIN + 2]), 250)
+        self.assertEqual(int(sharp[MARGIN + 2, MARGIN + 2]), 255)
+        self.assertEqual(int(sharp[MARGIN + 3, MARGIN + 2]), 0)
 
 
 if __name__ == "__main__":
