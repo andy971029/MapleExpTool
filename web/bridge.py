@@ -33,6 +33,7 @@ from mapleexp.core.stats import format_elapsed, format_exp, format_rate
 from mapleexp.core.tracker import ACTIVE, IDLE, PAUSED, WARMUP, Tracker
 from mapleexp.vision import identity as ident
 from mapleexp.vision import ocr, pngio
+from mapleexp.vision.locate import locate_exp_field
 from mapleexp.vision.reader import StatusReader
 from mapleexp.vision.templates import TemplateSet
 from mapleexp.win32.capture import CaptureError, Frame
@@ -47,6 +48,7 @@ STATE_LABELS = {
 # 連續讀不到幾格才懷疑 ROI 偏了（視窗被縮放）並重新定位；兩次重新定位至少隔幾秒。
 RELOCATE_AFTER_MISSES = 5
 RELOCATE_INTERVAL_SEC = 10.0
+WIDEN_CHECK_SEC = 10.0
 
 # 速率與「最近累計」用同一個時間窗。注意它是**活躍時間**窗（閒置時鐘會停），
 # 所以掛機或發呆的那幾分鐘不會把速率拉低；整場平均也是除以活躍時間，跟桌面版一致。
@@ -117,6 +119,7 @@ class WebSession:
         self.message = "尚未開始"
         self.rect: tuple[int, int, int, int] | None = None
         self._relocated_at = 0.0
+        self._widen_checked_at = 0.0
 
         # 身分：等級、職業、角色名
         self.level_reader = ident.LevelReader()
@@ -162,6 +165,7 @@ class WebSession:
         snapshot = self.tracker.snapshot()
         if reading.ok:
             self._scan_identity()
+            self._maybe_widen_roi()
 
         if not reading.ok:
             self.message = reading.reason
@@ -187,6 +191,32 @@ class WebSession:
             self.rect = auto.located.rect
         if auto.ok and self.reader is None:
             self.reader = StatusReader(self.capturer, self.cfg.reader, self.templates)
+
+    def _maybe_widen_roi(self) -> None:
+        """欄位被滑鼠或特效遮住時重新定位，只會找到露出來的那一截，ROI 就此變窄、
+        遮蔽移開後也不會自己長回來（實測 68 寬的欄位縮成 50，開頭數字被切掉）。
+        所以讀得到時也定期再找一次，只在找到「更寬」且讀得到百分比的結果才採用；
+        被遮住的那幾格只會找到更窄的，不會誤蓋掉好的 ROI。
+        """
+        now = time.monotonic()
+        if now - self._widen_checked_at < WIDEN_CHECK_SEC:
+            return
+        self._widen_checked_at = now
+        frame = self.capturer.frame
+        roi = self.cfg.reader.exp_roi
+        if frame is None or not roi.is_set():
+            return
+        found = locate_exp_field(frame, self.templates)
+        if found is None or not found.confident:
+            return
+        left, _top, right, _bottom = self._current_rect() or (0, 0, 0, 0)
+        if found.rect[2] - found.rect[0] <= right - left:
+            return
+        self.cfg.reader.exp_roi = found.roi
+        self.cfg.reader.threshold = found.threshold
+        self.cfg.reader.invert = found.invert
+        self.cfg.reader.ink_color = None
+        self.rect = found.rect
 
     # ---------------------------------------------------------------- 身分
 

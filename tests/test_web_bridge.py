@@ -98,6 +98,26 @@ class TestWebSession(unittest.TestCase):
         self.assertEqual(set(out["rois"]), {"exp", "level", "job", "name"})
         self.assertEqual(out["rois"]["exp"], out["rect"])
 
+    def test_roi_grows_back_after_being_shrunk_by_an_occluder(self):
+        """滑鼠遮住欄位時重新定位只會找到一截；遮蔽移開後 ROI 要自己長回來。"""
+        session = self.make_session()
+        self.feed(session, "623456[12.34%]")
+        full = session.cfg.reader.exp_roi
+        session.cfg.reader.exp_roi = bridge.Roi(full.anchor, full.dx + 15, full.dy, full.w - 15, full.h)
+        session._widen_checked_at = 0.0
+        self.feed(session, "623456[12.34%]")
+        grown = session.cfg.reader.exp_roi
+        self.assertGreaterEqual(grown.w, full.w - 2)
+        self.assertEqual(session._current_rect()[2] - session._current_rect()[0], grown.w)
+
+    def test_widen_check_never_shrinks_the_roi(self):
+        session = self.make_session()
+        self.feed(session, "623456[12.34%]")
+        before = session.cfg.reader.exp_roi
+        session._widen_checked_at = 0.0
+        self.feed(session, "623456[12.34%]")
+        self.assertEqual(session.cfg.reader.exp_roi, before)
+
     def test_payload_before_any_frame_is_safe(self):
         session = self.make_session()
         out = json.loads(session.tick())
