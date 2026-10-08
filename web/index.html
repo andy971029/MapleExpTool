@@ -577,7 +577,7 @@ function loadRecords() {
       return Object.values(v2).filter((r) => r.cumNet > 0).map((r, i) => ({
         id: `v2-${i}-${r.firstAt}`, character: r.character, job: r.job || "", level: r.level ?? null,
         mapId: r.mapId, mapName: r.mapName || "", startAt: r.firstAt, endAt: r.lastAt,
-        cumNet: r.cumNet, activeSec: r.activeSec, idleSec: r.idleSec, levelups: r.levelups, deaths: r.deaths,
+        cumNet: r.cumNet, activeSec: r.activeSec, idleSec: r.idleSec,
       }));
     }
   } catch { /* 壞掉的存檔當作沒有 */ }
@@ -602,7 +602,6 @@ function trackHistory(out) {
   if (!t) return;
   const now = {
     net: t.cum_net, active: t.active_sec, idle: t.idle_sec,
-    levelups: out.levelups || 0, deaths: out.deaths || 0,
   };
   const prev = lastTotals;
   lastTotals = now;
@@ -610,7 +609,6 @@ function trackHistory(out) {
   // 任何一項變小代表 tracker 被重設，這一格只當新基準，不算增量。
   const d = {
     net: now.net - prev.net, active: now.active - prev.active, idle: now.idle - prev.idle,
-    levelups: now.levelups - prev.levelups, deaths: now.deaths - prev.deaths,
   };
   if (Object.values(d).some((v) => v < 0)) return;
 
@@ -624,10 +622,9 @@ function trackHistory(out) {
   const seg = pending[key] || (pending[key] = {
     id: `${at}-${seq++}`, character, job, level, mapId, mapName: "",
     startAt: at, endAt: at,
-    cumNet: 0, activeSec: 0, idleSec: 0, levelups: 0, deaths: 0,
+    cumNet: 0, activeSec: 0, idleSec: 0,
   });
   seg.cumNet += d.net; seg.activeSec += d.active; seg.idleSec += d.idle;
-  seg.levelups += d.levelups; seg.deaths += d.deaths;
   if (out.map_name) seg.mapName = out.map_name;
   if (d.active > 0 || d.idle > 0) seg.endAt = at;
 }
@@ -667,8 +664,6 @@ const HIST_COLS = [
   { label: "活躍", num: true, sort: (r) => r.activeSec, text: (r) => fmtDuration(Math.round(r.activeSec)) },
   { label: "累計經驗", num: true, sort: (r) => r.cumNet, text: (r) => Math.round(r.cumNet).toLocaleString() },
   { label: "平均 EXP / hr", num: true, sort: avgRate, text: (r) => (avgRate(r) ?? "").toLocaleString() },
-  { label: "升級", num: true, sort: (r) => r.levelups, text: (r) => r.levelups },
-  { label: "死亡", num: true, sort: (r) => r.deaths, text: (r) => r.deaths },
 ];
 let histSort = { col: 1, dir: -1 };
 
