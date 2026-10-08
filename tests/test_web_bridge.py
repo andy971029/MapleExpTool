@@ -9,6 +9,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import helpers  # noqa: F401
 import numpy as np
@@ -36,6 +37,15 @@ class TestWebSession(unittest.TestCase):
     def make_session(self) -> bridge.WebSession:
         return bridge.WebSession(templates=self.templates)
 
+    def feed_over_time(self, session: bridge.WebSession, texts: list[str]) -> dict:
+        """速率要有時間差才算得出來；合成畫面瞬間餵完，所以讓時鐘每格走 1 秒。"""
+        clock = iter(range(1000, 1000 + 10 * len(texts)))
+        out: dict = {}
+        with mock.patch("mapleexp.vision.reader.time.perf_counter", lambda: float(next(clock))):
+            for text in texts:
+                out = self.feed(session, text)
+        return out
+
     def feed(self, session: bridge.WebSession, text: str) -> dict:
         screen = make_screen(text)
         h, w = screen.shape[:2]
@@ -60,11 +70,26 @@ class TestWebSession(unittest.TestCase):
 
     def test_gain_across_ticks_accumulates(self):
         session = self.make_session()
-        self.feed(session, "623456[12.34%]")
-        out = self.feed(session, "623956[12.35%]")
-        self.assertEqual(out["exp_abs"], 623956)
+        out = self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]", "624456[12.36%]"])
+        self.assertEqual(out["exp_abs"], 624456)
         self.assertEqual(out["state_key"], "active")
-        self.assertEqual(len(out["rates"]), 3)
+
+    def test_five_stats(self):
+        session = self.make_session()
+        out = self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]", "624456[12.36%]"])
+        stats = out["stats"]
+        self.assertTrue(stats["recent_valid"])
+        self.assertEqual(stats["recent"], bridge.format_exp(1000))
+        self.assertEqual(stats["total"], bridge.format_exp(1000))
+        rate = session.tracker.snapshot().rates[bridge.RATE_WINDOW_SEC].exp_per_hour
+        self.assertEqual(stats["per_hour"], bridge.format_rate(rate))
+        self.assertEqual(stats["per_half_hour"], bridge.format_exp(rate / 2))
+        self.assertNotEqual(stats["average"], "--")
+
+    def test_stats_before_any_gain_are_placeholders(self):
+        out = self.feed(self.make_session(), "623456[12.34%]")
+        self.assertFalse(out["stats"]["recent_valid"])
+        self.assertEqual(out["stats"]["recent"], "--")
 
     def test_payload_before_any_frame_is_safe(self):
         session = self.make_session()

@@ -48,6 +48,10 @@ STATE_LABELS = {
 RELOCATE_AFTER_MISSES = 5
 RELOCATE_INTERVAL_SEC = 10.0
 
+# 速率與「最近累計」用同一個時間窗。注意它是**活躍時間**窗（閒置時鐘會停），
+# 所以掛機或發呆的那幾分鐘不會把速率拉低；整場平均也是除以活躍時間，跟桌面版一致。
+RATE_WINDOW_SEC = 600
+
 
 # 角色名與職業多久重新確認一次（跟桌面版 CHARACTER_RECHECK_SEC 同一個理由：
 # 只有那塊像素真的變了才重辨識）。
@@ -104,6 +108,8 @@ class WebSession:
         # 不讀磁碟上的設定檔：瀏覽器裡沒有 %LOCALAPPDATA%，而且 ROI 每次分享視窗
         # 都重新找，便宜（不到 0.2 秒）又不會沿用到錯的。
         self.cfg = Config()
+        self.cfg.tracker.rate_windows = [RATE_WINDOW_SEC]
+        self.cfg.tracker.eta_window = RATE_WINDOW_SEC
         self.templates = templates or TemplateSet.load(builtin_templates_path())
         self.capturer = FrameCapturer()
         self.reader: StatusReader | None = None
@@ -316,15 +322,21 @@ class WebSession:
             data["state"] = "等待經驗值欄位"
             return json.dumps(data, ensure_ascii=False)
 
-        rates = []
-        for window in sorted(snapshot.rates):
-            estimate = snapshot.rates[window]
-            rates.append({
-                "window": window,
-                "label": _window_label(window),
-                "text": format_rate(estimate.exp_per_hour),
-                "valid": estimate.valid,
-            })
+        recent = snapshot.rates.get(RATE_WINDOW_SEC)
+        per_hour = recent.exp_per_hour if recent else None
+        average = (
+            snapshot.cum_net / (snapshot.active_sec / 3600.0) if snapshot.active_sec > 0 else None
+        )
+        stats = {
+            "per_hour": format_rate(per_hour),
+            "per_half_hour": format_exp(per_hour / 2 if per_hour is not None else None),
+            "total": format_exp(snapshot.cum_net),
+            "average": format_rate(average),
+            "recent": format_exp(recent.exp_gained if recent and recent.valid else None),
+            "recent_valid": bool(recent and recent.valid),
+            "window_text": _window_label(RATE_WINDOW_SEC),
+            "span_text": format_elapsed(recent.span_sec) if recent and recent.valid else "--",
+        }
         data.update({
             "state": STATE_LABELS.get(snapshot.state, snapshot.state),
             "state_key": snapshot.state,
@@ -334,12 +346,11 @@ class WebSession:
             "remaining": snapshot.remaining,
             "exp_text": format_exp(snapshot.exp_abs),
             "need_text": format_exp(snapshot.need),
-            "gross_text": format_exp(snapshot.cum_gross),
             "active_text": format_elapsed(snapshot.active_sec),
             "idle_text": format_elapsed(snapshot.idle_sec),
             "eta_text": _format_eta(snapshot.eta_sec),
             "eta_window": _window_label(snapshot.eta_window) if snapshot.eta_sec else "",
-            "rates": rates,
+            "stats": stats,
             "samples": snapshot.samples,
             "misses": snapshot.misses,
             "consecutive_misses": snapshot.consecutive_misses,

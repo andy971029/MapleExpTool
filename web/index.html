@@ -59,9 +59,15 @@
   <p id="hint" class="warn" hidden></p>
 
   <div class="card">
-    <div class="label">EXP/hr（5 分鐘窗）</div>
+    <div class="label">依最近 10 分鐘預估，每小時經驗</div>
     <div id="rate-main" class="big">--</div>
-    <div class="grid" style="margin-top:12px" id="rates"></div>
+    <div class="grid" style="margin-top:12px">
+      <div><div class="label">依最近 10 分鐘預估，每 30 分鐘</div><div class="v" id="st-half">--</div></div>
+      <div><div class="label">最近 10 分鐘累計經驗</div><div class="v" id="st-recent">--</div></div>
+      <div><div class="label">目前總累計經驗</div><div class="v" id="st-total">--</div></div>
+      <div><div class="label">整場平均每小時</div><div class="v" id="st-average">--</div></div>
+    </div>
+    <div class="label" style="margin-top:10px" id="st-note"></div>
   </div>
 
   <div class="card">
@@ -69,7 +75,6 @@
     <div class="bar"><div id="bar-fill"></div><span id="bar-text">-- / -- (--%)</span></div>
     <div class="kv" style="margin-top:10px"><span>升級剩餘時間</span><b id="eta">--</b></div>
     <div class="kv"><span>還差</span><b id="remaining">--</b></div>
-    <div class="kv"><span>本場累積經驗</span><b id="gross">--</b></div>
     <div class="kv"><span>活躍 / 閒置</span><b id="times">-- / --</b></div>
     <div class="kv"><span>升級 / 死亡</span><b id="events">0 / 0</b></div>
   </div>
@@ -321,7 +326,6 @@ function render(out, elapsedMs) {
 
   $("stats").textContent = `${out.samples} / ${out.misses} / ${elapsedMs.toFixed(0)} ms`;
   $("events").textContent = `${out.levelups} / ${out.deaths}`;
-  $("gross").textContent = out.gross_text;
   $("times").textContent = `${out.active_text} / ${out.idle_text}`;
   $("eta").textContent = out.eta_text + (out.eta_window ? `（${out.eta_window}窗）` : "");
   $("remaining").textContent = out.remaining == null ? "--" : out.remaining.toLocaleString();
@@ -330,11 +334,16 @@ function render(out, elapsedMs) {
   $("bar-fill").style.width = pct == null ? "0" : `${Math.min(100, pct)}%`;
   $("bar-text").textContent = `${out.exp_text} / ${out.need_text} (${pct == null ? "--" : pct.toFixed(2)}%)`;
 
-  const main = out.rates.find((r) => r.window === 300) || out.rates[0];
-  $("rate-main").textContent = main ? main.text : "--";
-  $("rates").innerHTML = out.rates.map((r) =>
-    `<div><div class="label">${r.label}</div><div class="v ${r.valid ? "" : "dim"}">${r.text}</div></div>`
-  ).join("");
+  const st = out.stats;
+  $("rate-main").textContent = st.per_hour;
+  $("st-half").textContent = st.per_half_hour;
+  $("st-recent").textContent = st.recent;
+  $("st-total").textContent = st.total;
+  $("st-average").textContent = st.average;
+  // 剛開始不足 10 分鐘時，「最近」其實是「開始到現在」，要讓人看得出來。
+  $("st-note").textContent = st.recent_valid
+    ? `最近 10 分鐘窗實際涵蓋 ${st.span_text}（只算活躍時間，閒置不計）。`
+    : "資料還不夠，需要至少兩筆經驗增加。";
 }
 
 $("share").addEventListener("click", share);
