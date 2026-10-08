@@ -660,6 +660,10 @@ function render(out, elapsedMs) {
   drawSpecimen("job", rois.job, out.job);
   drawSpecimen("name", rois.name, out.character);
   drawSpecimen("map", rois.map, out.map_name);
+  if (!rois.map) {
+    const hint = out.map_status || "等待定位…（需展開小地圖，並等文字辨識就緒）";
+    $("sp-map").querySelector(".empty").textContent = hint;
+  }
   $("map-name").textContent = out.map_name || "--";
 
   if (!out.state_key) {

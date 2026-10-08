@@ -166,6 +166,8 @@ class WebSession:
         self.map_vocab = MapVocabulary()
         self._minimap_body: tuple[int, int, int, int] | None = None
         self._minimap_searched_at = -MINIMAP_SEARCH_INTERVAL_SEC
+        # 給畫面顯示「為什麼還沒找到小地圖」：卡在哪一步一眼就看得出來。
+        self.map_status = "等待文字辨識引擎"
         self._map_misses = 0
         self._map_name_checked_at = -MAP_NAME_RETRY_SEC
 
@@ -327,6 +329,8 @@ class WebSession:
         if self._minimap_body is None:
             if self._ocr_ready:
                 self._maybe_search_minimap(frame)
+            else:
+                self.map_status = "等待文字辨識引擎載入"
             return
         if not found.map_id:
             # 面板還記著卻讀不到名稱區：連續幾格才算面板不見了（換圖的讀取畫面也會短暫讀不到）。
@@ -357,7 +361,9 @@ class WebSession:
         region = frame[: int(height * ident.MINIMAP_SEARCH_H), : int(width * ident.MINIMAP_SEARCH_W)]
         bars = [rect for rect, _fill in panels.find_title_bars(region)][:MINIMAP_MAX_BARS]
         if not bars:
+            self.map_status = "畫面左上角找不到白底標題列：小地圖是否已展開、有沒有被遮住？"
             return
+        self.map_status = f"找到 {len(bars)} 條標題列，辨識文字中…"
         images = []
         for left, top, right, bottom in bars:
             crop = frame[max(0, top - 2) : bottom + 2, max(0, left - 2) : right + 2]
@@ -370,6 +376,7 @@ class WebSession:
         """哪一條標題列讀起來像「小地圖」，它底下就是名稱區所在的內容區。"""
         frame = self.capturer.frame
         if not texts or frame is None:
+            self.map_status = "標題列的文字辨識沒有回答"
             return
         height, width = frame.shape[:2]
         if ctx["size"] != (int(width), int(height)):
@@ -385,7 +392,11 @@ class WebSession:
                         min(height, bottom + panels.BODY_HEIGHT),
                     )
                     self._map_misses = 0
+                    self.map_status = ""
                     return
+        read = [(c[0] if c else "") for c in texts]
+        self.map_status = "標題列讀到「" + "」「".join(t.replace("
+", "")[:8] for t in read) + "」，都不是「小地圖」"
 
     def _maybe_request_map_name(self) -> None:
         image = self.map_watcher.image
@@ -545,6 +556,7 @@ class WebSession:
             "character": self.character,
             "map_name": self.map_name,
             "map_id": self.map_id,
+            "map_status": self.map_status if self._minimap_body is None else "",
             "ocr": self._take_ocr_outbox(),
             "rois": {"exp": list(rect) if rect else None,
                      **{k: list(v) if v else None for k, v in self._rois.items()}},
