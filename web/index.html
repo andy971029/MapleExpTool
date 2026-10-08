@@ -274,6 +274,13 @@ async function boot() {
     const bridge = await (await fetch("bridge.py", { cache: "no-store" })).text();
     pyodide.runPython(bridge);
     session = pyodide.runPython("WebSession()");
+    // 地圖清單快照（scripts/export_mapvocab.py 匯出）；載不到就退回原始 OCR 文字。
+    try {
+      const vocab = await fetch("mapvocab.json", { cache: "no-store" });
+      if (vocab.ok) log(`地圖清單 ${session.set_map_vocab(await vocab.text())} 張`);
+    } catch (err) {
+      log("地圖清單載入失敗，地圖名稱會用原始辨識結果：" + err.message);
+    }
 
     $("share").textContent = "分享遊戲視窗";
     $("share").disabled = false;

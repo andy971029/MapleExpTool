@@ -168,6 +168,30 @@ class TestWebSession(unittest.TestCase):
         session.ocr_result(f"map:{out['map_id']}", json.dumps([["戰火之地"], ["沼澤地III"]]))
         self.assertEqual(tick()["map_name"], "戰火之地 · 沼澤地III")
 
+    def test_map_name_snaps_to_the_vocabulary_snapshot(self):
+        """OCR 缺字、羅馬數字讀成「川」，都該被清單修回官方名稱。"""
+        from test_identity import make_panel
+
+        screen = make_screen(clutter=False, extra=None)
+        screen[:80, :150] = make_panel()[:80, :150]
+        screen[4:18, 18:132, :3] = 255
+        h, w = screen.shape[:2]
+        session = self.make_session()
+        self.assertEqual(session.set_map_vocab(json.dumps([
+            ["1", "戰火之地", "沼澤地Ⅰ"], ["2", "戰火之地", "沼澤地Ⅲ"], ["3", "維多利亞港", "碼頭"],
+        ], ensure_ascii=False)), 3)
+        session.set_ocr_ready(True)
+        out = {}
+        for i in range(6):
+            session.feed_frame(rgba_bytes(screen), w, h)
+            out = json.loads(session.tick())
+            for req in out["ocr"]:
+                if req["id"] == "title:minimap":
+                    session.ocr_result(req["id"], json.dumps([["小地圖"]] * len(req["images"])))
+                elif req["id"].startswith("map:"):
+                    session.ocr_result(req["id"], json.dumps([["戰火之地"], ["沼澤地川"]]))
+        self.assertEqual(out["map_name"], "戰火之地 沼澤地Ⅲ")
+
     def test_minimap_is_forgotten_when_zone_disappears(self):
         from test_identity import make_panel
 

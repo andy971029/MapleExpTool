@@ -28,7 +28,8 @@ import numpy as np
 
 from mapleexp.autosetup import auto_configure, builtin_templates_path
 from mapleexp.config import Config, Roi
-from mapleexp.core import jobvocab
+from mapleexp.gamedata import MapRecord, MapVocabulary
+from mapleexp.core import jobvocab, mapvocab
 from mapleexp.core.stats import format_elapsed, format_exp, format_rate
 from mapleexp.core.tracker import ACTIVE, IDLE, PAUSED, WARMUP, Tracker
 from mapleexp.vision import identity as ident
@@ -161,6 +162,8 @@ class WebSession:
         self.map_id = ""
         self.map_name = ""
         self._map_names: dict[str, str] = {}
+        self._map_scores: dict[str, float] = {}
+        self.map_vocab = MapVocabulary()
         self._minimap_body: tuple[int, int, int, int] | None = None
         self._minimap_searched_at = -MINIMAP_SEARCH_INTERVAL_SEC
         self._map_misses = 0
@@ -174,6 +177,15 @@ class WebSession:
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
         self._ocr_ready = bool(ready)
+
+    def set_map_vocab(self, rows_json: str) -> int:
+        """載入網頁附的地圖清單快照（``[[id, street, name], ...]``），回傳筆數。"""
+        rows = json.loads(rows_json)
+        self.map_vocab = MapVocabulary(
+            tuple(MapRecord(str(i), str(street), str(name)) for i, street, name in rows),
+            source="快照",
+        )
+        return len(self.map_vocab)
 
     def reset(self) -> None:
         """重新計算，但 ROI 留著（視窗沒動就不用重找）。"""
@@ -327,7 +339,11 @@ class WebSession:
         if self.map_watcher.feed(found.map_id, found.map_image):
             self.map_id = self.map_watcher.map_id
             self.map_name = self._map_names.get(self.map_id, "")
-        if self.map_id and not self.map_name and self._ocr_ready:
+        # 有清單時，沒讀到滿分就隔一陣子重讀（OCR 在這個字級下每次結果會跳動，換圖當下
+        # 剛好讀壞名字就會一路錯下去；桌面版 _maybe_refresh_map_name 同一個理由）。
+        if self.map_id and self._ocr_ready and self._map_scores.get(self.map_id, -1.0) < (
+            1.0 if self.map_vocab else 0.0
+        ):
             self._maybe_request_map_name()
 
     def _maybe_search_minimap(self, frame: np.ndarray) -> None:
@@ -397,9 +413,18 @@ class WebSession:
                 lines.append(best)
         if not lines:
             return
-        name = " · ".join(lines)
-        self._map_names[ctx["map_id"]] = name
-        if ctx["map_id"] == self.map_id:
+        map_id = ctx["map_id"]
+        if self.map_vocab:
+            # 一定挑出最接近的一張，沒有門檻：真正區分地圖的是像素指紋，名字錯了只是顯示錯。
+            guess = mapvocab.identify("".join(lines), self.map_vocab)
+            if not guess.full_name or guess.score <= self._map_scores.get(map_id, -1.0):
+                return      # 這次沒有比上次好，保留原本的
+            name, score = guess.full_name, guess.score
+        else:
+            name, score = " · ".join(lines), 0.0
+        self._map_names[map_id] = name
+        self._map_scores[map_id] = score
+        if map_id == self.map_id:
             self.map_name = name
 
     def _request_level(self, zone) -> None:
