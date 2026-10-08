@@ -131,6 +131,7 @@ class WebSession:
         self._ocr_ready = False
         # 每一項資料「從畫面哪一塊讀來的」，頁面拿去裁放大圖，讓人肉眼核對辨識有沒有看對。
         self._rois: dict[str, tuple[int, int, int, int] | None] = {"level": None, "job": None, "name": None}
+        self._rois_size: tuple[int, int] | None = None
 
     # ------------------------------------------------------------------ #
 
@@ -200,8 +201,16 @@ class WebSession:
         if frame is None or rect is None:
             return
         found = ident.scan(frame, None, exp_rect=rect)
-        self._rois["level"] = found.level_rect
-        self._rois["job"], self._rois["name"] = _band_rects(found.name_rect, found.name_image)
+        # 版面只有換解析度才會變，所以找到過的位置要記住；某一格沒掃到（色鍵被特效蓋住、
+        # 名牌被遮一下）就清掉，頁面會每隔幾秒閃一次「等待定位」。
+        size = (int(frame.shape[1]), int(frame.shape[0]))
+        if size != self._rois_size:
+            self._rois = {"level": None, "job": None, "name": None}
+            self._rois_size = size
+        job_rect, name_rect = _band_rects(found.name_rect, found.name_image)
+        for key, value in (("level", found.level_rect), ("job", job_rect), ("name", name_rect)):
+            if value is not None:
+                self._rois[key] = value
 
         zone = found.zone
         if zone is not None and zone.digits:
