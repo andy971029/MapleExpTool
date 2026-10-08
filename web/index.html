@@ -221,7 +221,6 @@
       <div class="bar-text" id="bar-text">-- / --</div>
       <dl class="row4">
         <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
-        <div><dt>升級 / 死亡</dt><dd id="events">0 / 0</dd></div>
       </dl>
     </section>
   </div>
@@ -818,7 +817,6 @@ function render(out, elapsedMs) {
   setState(out.state, out.state_key);
 
   $("stats").textContent = `${out.samples} 筆 · 失敗 ${out.misses} · ${elapsedMs.toFixed(0)} ms/格`;
-  $("events").textContent = `${out.levelups} / ${out.deaths}`;
   $("times").textContent = `${padTime(out.active_text)} / ${padTime(out.idle_text)}`;
   $("eta").textContent = padTime(out.eta_text);
   $("remaining").textContent = out.remaining == null ? "--" : out.remaining.toLocaleString();
