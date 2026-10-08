@@ -104,6 +104,7 @@
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
     padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
   .sec-head h2 { margin: 0; padding: 0; border: 0; }
+  .rate-side { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
   .rate-pct { font-size: 20px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
   .pct-sub { margin-left: 8px; font-size: 12px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
   .boost { font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
@@ -202,7 +203,7 @@
         <h2>收益速率</h2>
         <label class="boost" title="試算經驗加倍券：速率、累計經驗與升級倒數都以 1.5 倍顯示，不影響歷史紀錄"><input type="checkbox" id="boost"> 經驗值 1.5 倍</label>
       </div>
-      <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-unit">EXP / hr</span><span class="rate-pct" id="rate-pct"></span></div>
+      <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-side"><span class="rate-pct" id="rate-pct"></span><span class="rate-unit">EXP / hr</span></span></div>
       <dl class="facts">
         <div><dt>依最近 10 min 預估</dt><dd><span id="st-half">--</span><small class="pct-sub" id="st-half-p"></small></dd></div>
         <div><dt>整場平均</dt><dd><span id="st-average">--</span><small class="pct-sub" id="st-average-p"></small></dd></div>
@@ -828,7 +829,7 @@ function render(out, elapsedMs) {
 
   const st = out.stats;
   $("rate-main").textContent = st.per_hour.replace("/h", "");
-  $("rate-pct").textContent = st.pct.per_hour === "--" ? "" : "≈ " + st.pct.per_hour.replace("/hr", " / hr");
+  $("rate-pct").textContent = st.pct.per_hour === "--" ? "" : st.pct.per_hour.replace("/hr", "");
   const sub = (id, v) => { $(id).textContent = v === "--" ? "" : "≈ " + v.replace("/hr", " / hr"); };
   sub("st-half-p", st.pct.per_half_hour); sub("st-average-p", st.pct.average);
   sub("st-recent-p", st.pct.recent); sub("st-total-p", st.pct.total);
