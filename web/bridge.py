@@ -207,7 +207,7 @@ class WebSession:
         self.job = ""
         self.character = ""
         self._character_key = ""
-        self._character_checked_at = 0.0
+        self._character_checked_at = -CHARACTER_RECHECK_SEC
         self._level_misses.clear()
         self.level_status = ""
         self._forget_minimap()
