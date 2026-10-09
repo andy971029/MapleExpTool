@@ -511,7 +511,8 @@ const ICONS = {
   mini: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="8" y="8" width="5" height="4" fill="currentColor"/></svg>',
   close: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>',
   shrink: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="11" width="12" height="2.4" fill="currentColor"/></svg>',
-  grow: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  // 展開用四個角往外的框：實心方塊已經是停止，空心方塊縮小後看起來太像。
+  grow: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>',
   replay: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.6-3.7"/><path fill="currentColor" d="M2 1.5v4.5h4.5z"/></svg>',
 };
 function setBtn(id, icon, text) {
