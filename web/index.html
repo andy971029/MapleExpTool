@@ -178,6 +178,80 @@
   video, canvas#frame { display: none; }
   @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
 </style>
+<!-- 小浮窗：只是主頁面的鏡子。主頁 <style> 整份複製過去（色票、字型、經驗條共用），
+     這裡只放浮窗自己的版面。數字一律從主頁面已經顯示的文字複製，不另外計算。 -->
+<template id="mini-tpl">
+  <style>
+    html, body { height: 100%; }
+    body.mini { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px 12px;
+      border-top: 3px solid var(--ink); background: var(--surface); overflow: hidden; }
+    /* 視窗被拉矮時寧可裁掉底部，也不要讓 flex 把經驗條壓成 0 高 */
+    body.mini > * { flex: none; min-width: 0; }
+    .m-top { display: flex; align-items: center; gap: 10px; }
+    .m-top .pill { padding: 3px 8px; font-size: 11px; gap: 6px; background: var(--ground); }
+    .m-top .pill i { width: 7px; height: 7px; }
+    /* 控制鈕只放圖示：浮窗太窄放不下字，完整說明放在 title（滑過會顯示） */
+    .m-btns { display: flex; gap: 4px; }
+    .m-btns button { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center;
+      justify-content: center; border-width: 1px; }
+    .m-btns button .ic { margin: 0; width: 12px; height: 12px; }
+    .m-btns button.halt { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+    /* 精簡模式：只留狀態燈、速率、升級倒數，一行就好，盡量少擋遊戲畫面 */
+    body.mini.compact { height: auto; padding: 6px 10px 8px; }
+    body.compact > :not(.m-compact), body:not(.compact) > .m-compact { display: none; }
+    .m-compact { display: flex; align-items: center; gap: 10px; }
+    .m-compact .pill { padding: 0; border: 0; background: none; }
+    .m-compact .pill i { width: 10px; height: 10px; }
+    .m-compact .rate-num { font-size: 32px; line-height: 1; }
+    .m-compact .rate-unit { font-size: 12px; margin-left: -4px; }
+    .m-ceta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+    .m-ceta small { font-size: 10px; color: var(--muted); }
+    .m-ceta b { font: 700 18px var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .m-lv { margin-left: auto; display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 12px; }
+    .m-lv b { font: 800 26px var(--display); line-height: 1; color: var(--ink); }
+    .m-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-bottom: 6px;
+      border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .m-who b { font: 700 14px var(--body); flex: none; }
+    .m-who span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+    .m-rate { display: flex; align-items: last baseline; gap: 8px; }
+    .m-rate .rate-num { font-size: clamp(30px, 13vw, 72px); }
+    .m-rate .rate-unit { font-size: 16px; }
+    .m-rate .rate-pct { font-size: 14px; }
+    .mini .bar { height: 14px; margin-top: 0; background: var(--ground); }
+    .m-barline { display: flex; align-items: baseline; gap: 8px; margin-top: -4px; }
+    .m-barline span { font: 400 11px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .m-barline b { margin-left: auto; font: 700 18px var(--display); color: var(--accent); }
+    dl.m-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 0 14px; margin: 0; }
+    dl.m-facts > div { border-top: 1px solid var(--line); padding-top: 4px; min-width: 0; }
+    dl.m-facts dt { font-size: 11px; }
+    dl.m-facts dd { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+  <div class="m-top">
+    <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
+    <div class="m-btns">
+      <button class="halt" data-for="share"></button>
+      <button class="secondary" data-for="pause"></button>
+      <button class="secondary" data-for="reset"></button>
+      <button class="secondary" id="m-shrink" data-mode="compact"></button>
+      <button class="secondary" id="m-close"></button>
+    </div>
+    <span class="m-lv">Lv.<b id="m-level">--</b></span>
+  </div>
+  <div class="m-who"><b id="m-char">--</b><span id="m-map">--</span></div>
+  <div class="m-rate"><span id="m-rate" class="rate-num">--</span><span class="rate-side"><span class="rate-pct" id="m-rate-pct"></span><span class="rate-unit">EXP / hr</span></span></div>
+  <div class="bar"><div id="m-bar-fill"></div></div>
+  <div class="m-barline"><span id="m-bar-text">-- / --</span><b id="m-bar-pct">--</b></div>
+  <div class="m-compact m-btns">
+    <span id="m-cstate" class="pill"><i></i></span>
+    <span id="m-crate" class="rate-num">--</span><span class="rate-unit">EXP / hr</span>
+    <span class="m-ceta"><small>升級剩餘</small><b id="m-ceta">--</b></span>
+    <button class="secondary" id="m-grow" data-mode="full"></button>
+  </div>
+  <dl class="m-facts">
+    <div><dt>升級剩餘時間</dt><dd id="m-eta">--</dd></div>
+    <div><dt>活躍 / 閒置</dt><dd id="m-times">-- / --</dd></div>
+  </dl>
+</template>
 </head>
 <body>
 <main>
@@ -187,6 +261,7 @@
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
       <button id="reset" class="secondary" disabled></button>
+      <button id="mini" class="secondary" title="開一個置頂的小視窗，疊在遊戲旁邊看速率與升級倒數"></button>
       <span id="state" class="pill"><i></i><span>尚未開始</span></span>
     </div>
   </header>
@@ -331,6 +406,7 @@ function setState(text, key) {
   const pill = $("state");
   pill.className = "pill " + (key || "");
   pill.lastElementChild.textContent = text;
+  syncMini();
 }
 
 // ---------------------------------------------------------------- 載入 Python
@@ -432,6 +508,10 @@ const ICONS = {
   play: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M4 2v12l10-6z"/></svg>',
   stop: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" fill="currentColor"/></svg>',
   pause: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" fill="currentColor"/><rect x="9.5" y="2" width="3.5" height="12" fill="currentColor"/></svg>',
+  mini: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="8" y="8" width="5" height="4" fill="currentColor"/></svg>',
+  close: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>',
+  shrink: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="11" width="12" height="2.4" fill="currentColor"/></svg>',
+  grow: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   replay: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.6-3.7"/><path fill="currentColor" d="M2 1.5v4.5h4.5z"/></svg>',
 };
 function setBtn(id, icon, text) {
@@ -450,6 +530,7 @@ function syncButtons() {
   setBtn("reset", "replay", "重置");
   $("pause").disabled = !sharing;
   $("reset").disabled = !sharing;
+  syncMini();
 }
 
 async function share() {
@@ -537,6 +618,7 @@ function clearStats() {
   $("bar-text").textContent = "-- / --";
   $("times").textContent = "-- / --";
   for (const id of ["id-char", "id-job", "map-name", "level"]) $(id).textContent = "--";
+  syncMini();
 }
 
 function doReset() {
@@ -573,6 +655,7 @@ function tick() {
     return;
   }
   render(out, performance.now() - started);
+  syncMini();
   trackHistory(out);
   if (ocr) for (const req of out.ocr || []) runOcr(req);
 }
@@ -915,6 +998,140 @@ function render(out, elapsedMs) {
   $("st-average").textContent = st.average.replace("/h", "/hr");
   $("st-note").textContent = st.recent_valid ? "" : "資料還不夠，需要至少兩筆經驗增加。";
 }
+
+// ---------------------------------------------------------------- 小浮窗
+// 只負責顯示：每次主頁面畫完，就把主頁面上「已經格式化好的文字」原樣複製過去。
+// 不碰 session、不算任何數字，所以兩邊永遠一致，主頁改了格式浮窗自動跟著變。
+// 優先用 Document Picture-in-Picture（Chrome / Edge 116+）：視窗會一直置頂，疊在遊戲上也看得到；
+// 不支援的瀏覽器退回一般彈出視窗（不會置頂）。
+const MINI_TEXT = [
+  ["m-level", "level"], ["m-char", "id-char"], ["m-map", "map-name"],
+  ["m-rate", "rate-main"], ["m-rate-pct", "rate-pct"],
+  ["m-bar-pct", "bar-pct"], ["m-bar-text", "bar-text"],
+  ["m-eta", "eta"], ["m-times", "times"],
+  ["m-crate", "rate-main"], ["m-ceta", "eta"],
+];
+let miniWin = null;
+let miniCompact = false;      // 記住上次的模式，重開浮窗時沿用
+let miniFullSize = null;      // 縮小前的視窗外框大小，放大時還原
+
+function syncMini() {
+  if (!miniWin || miniWin.closed) return;
+  const doc = miniWin.document;
+  for (const [mid, id] of MINI_TEXT) {
+    const el = doc.getElementById(mid);
+    if (el) el.textContent = $(id).textContent;
+  }
+  const fill = doc.getElementById("m-bar-fill");
+  if (fill) fill.style.width = $("bar-fill").style.width;
+  const pill = doc.getElementById("m-state");
+  if (pill) {
+    pill.className = $("state").className;
+    pill.lastElementChild.textContent = $("state").lastElementChild.textContent;
+  }
+  // 精簡列的燈號沒有字，狀態文字放在 title，滑過看得到。
+  const dot = doc.getElementById("m-cstate");
+  if (dot) {
+    dot.className = $("state").className;
+    dot.title = $("state").lastElementChild.textContent;
+  }
+  // 控制鈕：圖示、說明、停用狀態都照抄主頁的同名按鈕。停止鈕只在分享中可按，
+  // 因為沒在分享時主頁那顆是「分享遊戲視窗」，選視窗的對話框要在主頁按才叫得出來。
+  for (const btn of doc.querySelectorAll(".m-btns [data-for]")) {
+    const main = $(btn.dataset.for);
+    const icon = main.querySelector("svg");
+    btn.innerHTML = icon ? icon.outerHTML : "";
+    btn.title = main.textContent;
+    btn.setAttribute("aria-label", main.textContent);
+    btn.disabled = main.disabled || (btn.dataset.for === "share" && !stream);
+  }
+  // 主頁若有手動指定亮／暗色，浮窗跟著；沒指定就各自跟系統。
+  const theme = document.documentElement.dataset.theme;
+  if (theme) doc.documentElement.dataset.theme = theme;
+  else delete doc.documentElement.dataset.theme;
+}
+
+function mountMini(win) {
+  const doc = win.document;
+  doc.title = "服刑日誌 · 小浮窗";
+  doc.documentElement.lang = "zh-Hant";
+  for (const node of document.head.querySelectorAll('link[rel="stylesheet"], style')) {
+    doc.head.appendChild(node.cloneNode(true));
+  }
+  doc.body.className = "mini";
+  doc.body.replaceChildren(document.importNode($("mini-tpl").content, true));
+  // 浮窗的按鈕只是轉按主頁的按鈕，邏輯全在主頁。停止和重置會在主頁跳出結算視窗，
+  // 所以順便把主頁叫到前面，不然使用者只看到浮窗、不知道要去哪裡按確認。
+  for (const btn of doc.querySelectorAll(".m-btns [data-for]")) {
+    btn.addEventListener("click", () => {
+      $(btn.dataset.for).click();
+      if (btn.dataset.for !== "pause") window.focus();
+    });
+  }
+  for (const btn of doc.querySelectorAll("[data-mode]")) {
+    const compact = btn.dataset.mode === "compact";
+    const label = compact ? "縮小（只留速率與倒數）" : "展開完整資訊";
+    btn.innerHTML = compact ? ICONS.shrink : ICONS.grow;
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.addEventListener("click", () => setMiniCompact(win, compact));
+  }
+  if (miniCompact) setMiniCompact(win, true);
+  const close = doc.getElementById("m-close");
+  close.innerHTML = ICONS.close;
+  close.title = "關閉小浮窗";
+  close.setAttribute("aria-label", "關閉小浮窗");
+  close.addEventListener("click", () => win.close());
+  win.addEventListener("pagehide", () => {
+    if (miniWin === win) miniWin = null;
+    syncMiniButton();
+  });
+  miniWin = win;
+  syncMini();
+  syncMiniButton();
+}
+
+// 切換只是換 CSS class；視窗大小跟著內容縮放。置頂小視窗的 resizeTo 需要使用者點擊才會生效，
+// 從按鈕呼叫剛好符合；做不到（例如瀏覽器不准）就只換版面，使用者可以自己拉小。
+function setMiniCompact(win, compact) {
+  const doc = win.document;
+  if (compact && !doc.body.classList.contains("compact")) miniFullSize = [win.outerWidth, win.outerHeight];
+  miniCompact = compact;
+  doc.body.classList.toggle("compact", compact);
+  try {
+    if (compact) {
+      const chrome = win.outerHeight - win.innerHeight;
+      win.resizeTo(win.outerWidth, Math.ceil(doc.body.getBoundingClientRect().height) + chrome);
+    } else if (miniFullSize) {
+      win.resizeTo(miniFullSize[0], miniFullSize[1]);
+    }
+  } catch { /* 不能改大小就算了 */ }
+}
+
+async function toggleMini() {
+  if (miniWin && !miniWin.closed) { miniWin.close(); miniWin = null; syncMiniButton(); return; }
+  try {
+    if (window.documentPictureInPicture) {
+      mountMini(await documentPictureInPicture.requestWindow({ width: 340, height: 240 }));
+      return;
+    }
+    const win = window.open("", "mapleexp-mini", "popup,width=340,height=260");
+    if (!win) { log("瀏覽器擋下了彈出視窗，請允許這個網站開啟彈出視窗。"); return; }
+    mountMini(win);
+    log("這個瀏覽器不支援置頂小視窗，改用一般彈出視窗（不會一直在最上層）。");
+  } catch (err) {
+    log("開啟小浮窗失敗：" + err.message);
+  }
+}
+
+function syncMiniButton() {
+  const open = !!miniWin && !miniWin.closed;
+  setBtn("mini", "mini", open ? "關閉小浮窗" : "開啟小浮窗");
+}
+
+$("mini").addEventListener("click", toggleMini);
+window.addEventListener("pagehide", () => { if (miniWin && !miniWin.closed) miniWin.close(); });
+syncMiniButton();
 
 $("share").addEventListener("click", () => (stream ? stopAndSettle(false) : share()));
 $("pause").addEventListener("click", togglePause);
